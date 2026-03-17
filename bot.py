@@ -837,29 +837,22 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             amount_rub = order["rub"]
-            pay_url = (
-                f"https://yoomoney.ru/quickpay/confirm"
-                f"?receiver={YOOMONEY_WALLET}"
-                f"&quickpay-form=button"
-                f"&sum={amount_rub}"
-                f"&label={order_number}"
-                f"&targets=Оплата+заказа+{order_number}"
-            )
 
             await query.edit_message_text(
                 f"💳 Оплата через ЮMoney\n\n"
                 f"📦 Заказ: <b>{order_number}</b>\n"
                 f"💰 К оплате: <b>{fmt(amount_rub)} ₽</b>\n\n"
                 f"━━━━━━━━━━━━━━━━━━\n"
-                f"📲 <b>Как оплатить:</b>\n"
-                f"1. Нажмите кнопку <b>«Перейти к оплате»</b>\n"
-                f"2. Оплатите на сайте ЮMoney\n"
-                f"3. Сделайте скриншот подтверждения\n"
+                f"📲 <b>Реквизиты для перевода:</b>\n"
+                f"Кошелёк ЮMoney: <code>{YOOMONEY_WALLET}</code>\n"
                 f"━━━━━━━━━━━━━━━━━━\n\n"
-                f"⚠️ Не меняйте сумму — иначе заказ не определится!\n\n"
-                f"После оплаты нажмите «✅ Я оплатил» и отправьте подтверждение.",
+                f"<b>Как оплатить:</b>\n"
+                f"1. Откройте приложение ЮMoney\n"
+                f"2. Переведите <b>точную сумму</b> на кошелёк выше\n"
+                f"3. Сделайте скриншот подтверждения\n"
+                f"4. Нажмите «✅ Я оплатил» и отправьте скриншот\n\n"
+                f"⚠️ Переводите <b>точную сумму</b> — {fmt(amount_rub)} ₽",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("💳 Перейти к оплате", url=pay_url)],
                     [InlineKeyboardButton("✅ Я оплатил", callback_data=f"paid_yoomoney_{order_number}")],
                     [InlineKeyboardButton("⬅️ Назад к способам оплаты", callback_data="back_to_payment")]
                 ]),
