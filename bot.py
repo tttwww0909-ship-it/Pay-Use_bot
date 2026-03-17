@@ -354,6 +354,8 @@ def add_order_to_sheet(order_data):
         # === ДОБАВЛЯЕМ В GOOGLE SHEETS ===
         if sheet:
             try:
+                from datetime import datetime
+                current_date = datetime.now().strftime("%d.%m.%Y %H:%M")
                 sheet.append_row([
                     order_data["number"],
                     order_data["user_id"],
@@ -362,8 +364,8 @@ def add_order_to_sheet(order_data):
                     order_data["tariff"],
                     order_data["kzt"],
                     order_data["rub"],
-                    "",
-                    "",
+                    "",  # Способ оплаты - заполнится позже
+                    current_date,
                     ORDER_STATUSES["new"]
                 ])
                 logger.info(f"Заказ {order_data['number']} добавлен в Google Sheets")
@@ -401,6 +403,17 @@ def add_order_to_sheet(order_data):
     except Exception as e:
         logger.error(f"Ошибка при добавлении заказа: {e}")
         return False
+
+def update_payment_method(order_number, payment_method):
+    """Записывает способ оплаты в Google Sheets (колонка H)"""
+    try:
+        if sheet:
+            cell = sheet.find(order_number)
+            if cell:
+                sheet.update_cell(cell.row, 8, payment_method)
+                logger.info(f"✅ Способ оплаты {payment_method} записан для {order_number}")
+    except Exception as e:
+        logger.warning(f"⚠️ Ошибка записи способа оплаты: {e}")
 
 def update_order_status(order_number, new_status):
     """Обновляет статус заказа в БД и Google Sheets"""
@@ -858,6 +871,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ]),
                 parse_mode="HTML"
             )
+            update_payment_method(order_number, "ЮMoney")
             logger.info(f"Клиент {query.from_user.id} выбрал ЮMoney для {order_number}")
 
         # === ОПЛАТА ЧЕРЕЗ OZON БАНК ===
@@ -889,6 +903,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ]),
                 parse_mode="HTML"
             )
+            update_payment_method(order_number, "OZON")
             logger.info(f"Клиент {query.from_user.id} выбрал OZON банк для {order_number}")
 
         # === ОПЛАТА КРИПТОЙ ===
@@ -922,6 +937,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ]),
                 parse_mode="HTML"
             )
+            update_payment_method(order_number, "Crypto")
             logger.info(f"Клиент {query.from_user.id} выбрал крипто-оплату для {order_number}")
 
         # === ПОДТВЕРЖДЕНИЕ КРИПТО-ОПЛАТЫ ===
