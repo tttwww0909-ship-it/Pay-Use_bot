@@ -1,0 +1,335 @@
+"""
+Модуль для работы с базой данных SQLite.
+Здесь хранятся все пользователи и заказы.
+"""
+
+import sqlite3
+import logging
+from datetime import datetime
+from typing import Optional, List, Dict
+
+logger = logging.getLogger(__name__)
+
+DATABASE_FILE = "orders.db"
+
+
+class Database:
+    """Класс для работы с БД"""
+    
+    def __init__(self):
+        self.db_file = DATABASE_FILE
+        self.init_db()
+    
+    def init_db(self):
+        """Инициализирует БД и создаёт таблицы"""
+        try:
+            conn = sqlite3.connect(self.db_file)
+            c = conn.cursor()
+            
+            # Таблица пользователей
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    telegram_id INTEGER UNIQUE NOT NULL,
+                    username TEXT,
+                    first_name TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Таблица заказов
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS orders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    order_number TEXT UNIQUE NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    service TEXT NOT NULL,
+                    tariff TEXT NOT NULL,
+                    amount_kzt INTEGER NOT NULL,
+                    amount_rub INTEGER NOT NULL,
+                    status TEXT DEFAULT 'new',
+                    payment_id TEXT UNIQUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+            ''')
+            
+            # Таблица платежей
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS payments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    payment_id TEXT UNIQUE NOT NULL,
+                    order_id INTEGER NOT NULL,
+                    amount REAL NOT NULL,
+                    status TEXT DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(order_id) REFERENCES orders(id)
+                )
+            ''')
+            
+            # Таблица лога действий
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS action_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    action TEXT NOT NULL,
+                    details TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            conn.commit()
+            conn.close()
+            logger.info("✅ База данных инициализирована")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка инициализации БД: {e}")
+    
+    def add_user(self, telegram_id: int, username: str = None, first_name: str = None) -> int:
+        """Добавляет или обновляет пользователя"""
+        try:
+            conn = sqlite3.connect(self.db_file)
+            c = conn.cursor()
+            
+            c.execute("SELECT id FROM users WHERE telegram_id = ?", (telegram_id,))
+            result = c.fetchone()
+            
+            if result:
+                c.execute('''
+                    UPDATE users 
+                    SET username = ?, first_name = ?
+                    WHERE telegram_id = ?
+                ''', (username, first_name, telegram_id))
+                user_id = result[0]
+            else:
+                c.execute('''
+                    INSERT INTO users (telegram_id, username, first_name)
+                    VALUES (?, ?, ?)
+                ''', (telegram_id, username, first_name))
+                user_id = c.lastrowid
+                logger.info(f"Добавлен новый пользователь: {telegram_id}")
+            
+            conn.commit()
+            conn.close()
+            return user_id
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка добавления пользователя: {e}")
+            return None
+    
+    def get_user(self, telegram_id: int) -> Optional[Dict]:
+        """Получает пользователя по telegram_id"""
+        try:
+            conn = sqlite3.connect(self.db_file)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            
+            c.execute("SELECT * FROM users WHERE telegram_id = ?", (telegram_id,))
+            result = c.fetchone()
+            conn.close()
+            
+            return dict(result) if result else None
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения пользователя: {e}")
+            return None
+    
+    def add_order(self, order_number: str, user_id: int, service: str, tariff: str,
+                  amount_kzt: int, amount_rub: int, payment_id: str = None) -> Optional[int]:
+        """Добавляет новый заказ в БД"""
+        try:
+            conn = sqlite3.connect(self.db_file)
+            c = conn.cursor()
+            
+            c.execute('''
+                INSERT INTO orders 
+                (order_number, user_id, service, tariff, amount_kzt, amount_rub, payment_id, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'new')
+            ''', (order_number, user_id, service, tariff, amount_kzt, amount_rub, payment_id))
+            
+            order_id = c.lastrowid
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"✅ Заказ {order_number} добавлен в БД")
+            return order_id
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка добавления заказа: {e}")
+            return None
+    
+    def get_order(self, order_number: str) -> Optional[Dict]:
+        """Получает заказ по номеру"""
+        try:
+            conn = sqlite3.connect(self.db_file)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            
+            c.execute("SELECT * FROM orders WHERE order_number = ?", (order_number,))
+            result = c.fetchone()
+            conn.close()
+            
+            return dict(result) if result else None
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения заказа: {e}")
+            return None
+    
+    def get_user_orders(self, user_id: int) -> List[Dict]:
+        """Получает все заказы пользователя"""
+        try:
+            conn = sqlite3.connect(self.db_file)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            
+            c.execute("SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC", (user_id,))
+            results = c.fetchall()
+            conn.close()
+            
+            return [dict(row) for row in results]
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения заказов пользователя: {e}")
+            return []
+    
+    def update_order_status(self, order_number: str, new_status: str) -> bool:
+        """Обновляет статус заказа"""
+        try:
+            conn = sqlite3.connect(self.db_file)
+            c = conn.cursor()
+            
+            c.execute('''
+                UPDATE orders 
+                SET status = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE order_number = ?
+            ''', (new_status, order_number))
+            
+            if c.rowcount == 0:
+                logger.warning(f"Заказ {order_number} не найден")
+                conn.close()
+                return False
+            
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"✅ Статус {order_number} изменён на {new_status}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка обновления статуса: {e}")
+            return False
+    
+    def get_order_by_payment_id(self, payment_id: str) -> Optional[Dict]:
+        """Получает заказ по payment_id"""
+        try:
+            conn = sqlite3.connect(self.db_file)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            
+            c.execute("SELECT * FROM orders WHERE payment_id = ?", (payment_id,))
+            result = c.fetchone()
+            conn.close()
+            
+            return dict(result) if result else None
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения заказа по payment_id: {e}")
+            return None
+    
+    def add_payment(self, payment_id: str, order_id: int, amount: float) -> bool:
+        """Добавляет платёж"""
+        try:
+            conn = sqlite3.connect(self.db_file)
+            c = conn.cursor()
+            
+            c.execute('''
+                INSERT INTO payments (payment_id, order_id, amount, status)
+                VALUES (?, ?, ?, 'pending')
+            ''', (payment_id, order_id, amount))
+            
+            conn.commit()
+            conn.close()
+            logger.info(f"✅ Платёж {payment_id} добавлен")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка добавления платежа: {e}")
+            return False
+    
+    def update_payment_status(self, payment_id: str, status: str) -> bool:
+        """Обновляет статус платежа"""
+        try:
+            conn = sqlite3.connect(self.db_file)
+            c = conn.cursor()
+            
+            c.execute('''
+                UPDATE payments 
+                SET status = ?
+                WHERE payment_id = ?
+            ''', (status, payment_id))
+            
+            if c.rowcount == 0:
+                logger.warning(f"Платёж {payment_id} не найден")
+                conn.close()
+                return False
+            
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"✅ Платёж {payment_id} обновлён: {status}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка обновления платежа: {e}")
+            return False
+    
+    def log_action(self, user_id: int, action: str, details: str = None) -> bool:
+        """Логирует действие пользователя"""
+        try:
+            conn = sqlite3.connect(self.db_file)
+            c = conn.cursor()
+            
+            c.execute('''
+                INSERT INTO action_log (user_id, action, details)
+                VALUES (?, ?, ?)
+            ''', (user_id, action, details))
+            
+            conn.commit()
+            conn.close()
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка логирования действия: {e}")
+            return False
+    
+    def get_stats(self) -> Dict:
+        """Получает статистику"""
+        try:
+            conn = sqlite3.connect(self.db_file)
+            c = conn.cursor()
+            
+            c.execute("SELECT COUNT(*) FROM users")
+            users_count = c.fetchone()[0]
+            
+            c.execute("SELECT COUNT(*) FROM orders")
+            orders_count = c.fetchone()[0]
+            
+            c.execute("SELECT COUNT(*) FROM orders WHERE status = 'paid'")
+            paid_orders = c.fetchone()[0]
+            
+            conn.close()
+            
+            return {
+                "users": users_count,
+                "orders": orders_count,
+                "paid_orders": paid_orders
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения статистики: {e}")
+            return {}
+
+
+# Создаём глобальный объект БД
+db = Database()
