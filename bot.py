@@ -570,6 +570,96 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+        # === FAQ HANDLERS ===
+        if query.data == "faq_how":
+            await query.edit_message_text(
+                "🔹 Как работает сервис?\n\n"
+                "Вы выбираете сумму пополнения, оплачиваете удобным способом, "
+                "отправляете скриншот оплаты и свою почту, к которой привязан ID, "
+                "и мы пополняем ваш Apple ID.\n\n"
+                "⚠️ Обращаем ваше внимание, что наш сервис пополняет Apple ID "
+                "гражданам РФ в казахской валюте KZT, для этого вам необходимо "
+                "сменить регион Apple ID на Казахстан.\n\n"
+                "📱 Как сменить регион:\n"
+                "1️⃣ Откройте «Настройки» → ваше имя → «Медиа и покупки»\n"
+                "2️⃣ Нажмите «Просмотреть» → «Страна/регион»\n"
+                "3️⃣ Выберите «Казахстан»\n"
+                "4️⃣ Примите условия и подтвердите\n"
+                "5️⃣ Введите любой казахстанский адрес (можно найти в интернете)",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к FAQ", callback_data="back_to_faq")]])
+            )
+            return
+
+        if query.data == "faq_time":
+            await query.edit_message_text(
+                "🔹 Сколько времени занимает пополнение?\n\n"
+                "Обычно пополнение происходит в течение 15-30 минут после подтверждения оплаты. "
+                "В редких случаях может занять до нескольких часов. "
+                "Это может быть связано с техническими проблемами или большим количеством запросов.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к FAQ", callback_data="back_to_faq")]])
+            )
+            return
+
+        if query.data == "faq_payment":
+            await query.edit_message_text(
+                "🔹 Какие способы оплаты доступны?\n\n"
+                "Наши услуги вы можете оплатить следующими способами:\n\n"
+                "• OZON банк (перевод по ссылке)\n"
+                "• ЮMoney (пополнение кошелька)\n"
+                "• Bybit (перевод по UID)\n"
+                "• С любой другой криптоплатформы по адресу кошелька TRON (TRC20), монета USDT\n\n"
+                "Мы работаем над увеличением способов оплаты.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к FAQ", callback_data="back_to_faq")]])
+            )
+            return
+
+        if query.data == "faq_commission":
+            await query.edit_message_text(
+                "🔹 Какая комиссия сервиса?\n\n"
+                "Комиссия за предоставленные услуги составляет 15% от суммы пополнения.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к FAQ", callback_data="back_to_faq")]])
+            )
+            return
+
+        if query.data == "faq_problems":
+            await query.edit_message_text(
+                "🔹 Что делать, если возникли проблемы?\n\n"
+                "Напишите нам — кнопка «Написать менеджеру» доступна в заказе, "
+                "или свяжитесь напрямую с поддержкой.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📞 Написать в поддержку", url="https://t.me/poplnyaska_halper")],
+                    [InlineKeyboardButton("⬅️ Назад к FAQ", callback_data="back_to_faq")]
+                ])
+            )
+            return
+
+        if query.data == "faq_safety":
+            await query.edit_message_text(
+                "🔹 Безопасно ли это?\n\n"
+                "Да! Это абсолютно безопасно. Мы используем минимум личной информации "
+                "(UserID, username и информацию о заказе) для статистики, а вашу Apple почту "
+                "используем непосредственно для пополнения Apple ID напрямую и не сохраняем!\n\n"
+                "Ваши данные в безопасности!",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к FAQ", callback_data="back_to_faq")]])
+            )
+            return
+
+        if query.data == "back_to_faq":
+            keyboard = [
+                [InlineKeyboardButton("🔹 Как работает сервис?", callback_data="faq_how")],
+                [InlineKeyboardButton("🔹 Сколько времени занимает?", callback_data="faq_time")],
+                [InlineKeyboardButton("🔹 Способы оплаты", callback_data="faq_payment")],
+                [InlineKeyboardButton("🔹 Какая комиссия?", callback_data="faq_commission")],
+                [InlineKeyboardButton("🔹 Что делать при проблемах?", callback_data="faq_problems")],
+                [InlineKeyboardButton("🔹 Безопасно ли это?", callback_data="faq_safety")]
+            ]
+            await query.edit_message_text(
+                "❓ Часто задаваемые вопросы\n\n"
+                "Выберите интересующий вопрос:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return
+
         # === ПОПОЛНЕНИЕ APPLE ID ===
         if query.data == "apple_topup":
             keyboard = [
@@ -1392,35 +1482,19 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         if text == "❓ FAQ":
-            faq_text = (
+            keyboard = [
+                [InlineKeyboardButton("🔹 Как работает сервис?", callback_data="faq_how")],
+                [InlineKeyboardButton("🔹 Сколько времени занимает?", callback_data="faq_time")],
+                [InlineKeyboardButton("🔹 Способы оплаты", callback_data="faq_payment")],
+                [InlineKeyboardButton("🔹 Какая комиссия?", callback_data="faq_commission")],
+                [InlineKeyboardButton("🔹 Что делать при проблемах?", callback_data="faq_problems")],
+                [InlineKeyboardButton("🔹 Безопасно ли это?", callback_data="faq_safety")]
+            ]
+            await update.message.reply_text(
                 "❓ Часто задаваемые вопросы\n\n"
-                "━━━━━━━━━━━━━━━━━━━━━━\n"
-                "🔹 Как работает сервис?\n"
-                "Вы выбираете сумму пополнения, оплачиваете удобным способом, "
-                "отправляете скриншот оплаты, и мы пополняем ваш Apple ID.\n\n"
-                "━━━━━━━━━━━━━━━━━━━━━━\n"
-                "🔹 Сколько времени занимает пополнение?\n"
-                "Обычно пополнение происходит в течение 15-30 минут после подтверждения оплаты. "
-                "В редких случаях может занять до нескольких часов.\n\n"
-                "━━━━━━━━━━━━━━━━━━━━━━\n"
-                "🔹 Какие способы оплаты доступны?\n"
-                "• Kaspi банк\n"
-                "• OZON банк\n"
-                "• Тинькофф\n"
-                "• СБП (Система быстрых платежей)\n\n"
-                "━━━━━━━━━━━━━━━━━━━━━━\n"
-                "🔹 Какая комиссия сервиса?\n"
-                "Комиссия составляет 15% от суммы пополнения.\n\n"
-                "━━━━━━━━━━━━━━━━━━━━━━\n"
-                "🔹 Что делать если возникли проблемы?\n"
-                "Напишите нам — кнопка «Написать менеджеру» доступна в заказе, "
-                "или свяжитесь напрямую с поддержкой.\n\n"
-                "━━━━━━━━━━━━━━━━━━━━━━\n"
-                "🔹 Безопасно ли это?\n"
-                "Да! Мы работаем официально и пополняем Apple ID напрямую. "
-                "Ваши данные в безопасности."
+                "Выберите интересующий вопрос:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
             )
-            await update.message.reply_text(faq_text)
             return
 
         if text == "📋 Мои заказы":
