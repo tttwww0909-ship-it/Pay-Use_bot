@@ -1247,15 +1247,234 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if query.from_user.id != ADMIN_ID:
                 await query.answer("❌ У вас нет доступа", show_alert=True)
                 return
-            stats = db.get_stats()
+            
+            # Показываем меню статистики
+            keyboard = [
+                [InlineKeyboardButton("📊 Общая статистика", callback_data="stats_general")],
+                [InlineKeyboardButton("📅 За сегодня", callback_data="stats_today")],
+                [InlineKeyboardButton("📆 За неделю", callback_data="stats_week")],
+                [InlineKeyboardButton("📈 За месяц", callback_data="stats_month")],
+                [InlineKeyboardButton("👥 По клиентам", callback_data="stats_clients")],
+                [InlineKeyboardButton("💰 По тарифам", callback_data="stats_tariffs")],
+                [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_admin")]
+            ]
             await query.edit_message_text(
-                "📊 Статистика\n\n"
-                f"👥 Пользователей: <b>{stats.get('users', 0)}</b>\n"
-                f"📦 Всего заказов: <b>{stats.get('orders', 0)}</b>\n"
-                f"✅ Оплаченных: <b>{stats.get('paid_orders', 0)}</b>",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="back_to_admin")]]),
+                "📊 <b>Статистика</b>\n\n"
+                "Выберите раздел:",
+                reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode="HTML"
             )
+
+        # === ОБЩАЯ СТАТИСТИКА ===
+        elif query.data == "stats_general":
+            if query.from_user.id != ADMIN_ID:
+                return
+            try:
+                sheet = get_sheet()
+                if not sheet:
+                    await query.edit_message_text("⚠️ Ошибка доступа к таблице.")
+                    return
+                
+                records = sheet.get_all_records()
+                
+                total_orders = len(records)
+                unique_users = len(set(str(r.get("ID", "")) for r in records if r.get("ID")))
+                
+                # По статусам
+                statuses = {}
+                for r in records:
+                    status = r.get("Статус", "Неизвестен")
+                    statuses[status] = statuses.get(status, 0) + 1
+                
+                # Выручка (только выполненные)
+                revenue = sum(int(r.get("Сумма RUB", 0) or 0) for r in records if r.get("Статус") == "Выполнен")
+                total_kzt = sum(int(r.get("Сумма KZT", 0) or 0) for r in records if r.get("Статус") == "Выполнен")
+                
+                # Средний чек
+                completed = [r for r in records if r.get("Статус") == "Выполнен"]
+                avg_check = int(revenue / len(completed)) if completed else 0
+                
+                # Конверсия
+                paid_count = statuses.get("Оплачен", 0) + statuses.get("Выполнен", 0)
+                conversion = int(paid_count / total_orders * 100) if total_orders > 0 else 0
+                
+                msg = (
+                    "📊 <b>ОБЩАЯ СТАТИСТИКА</b>\n\n"
+                    f"👥 Уникальных клиентов: <b>{unique_users}</b>\n"
+                    f"📦 Всего заказов: <b>{total_orders}</b>\n\n"
+                    f"<b>📈 ПО СТАТУСАМ:</b>\n"
+                )
+                for status, count in statuses.items():
+                    msg += f"• {status}: <b>{count}</b>\n"
+                
+                msg += (
+                    f"\n<b>💰 ФИНАНСЫ:</b>\n"
+                    f"• Выручка: <b>{fmt(revenue)} ₽</b>\n"
+                    f"• В KZT: <b>{fmt(total_kzt)} KZT</b>\n"
+                    f"• Средний чек: <b>{fmt(avg_check)} ₽</b>\n"
+                    f"• Конверсия: <b>{conversion}%</b>"
+                )
+                
+                await query.edit_message_text(
+                    msg,
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="admin_stats")]]),
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"Ошибка получения статистики: {e}")
+                await query.edit_message_text("⚠️ Ошибка получения статистики.")
+
+        # === СТАТИСТИКА ЗА ПЕРИОД ===
+        elif query.data in ["stats_today", "stats_week", "stats_month"]:
+            if query.from_user.id != ADMIN_ID:
+                return
+            try:
+                sheet = get_sheet()
+                if not sheet:
+                    await query.edit_message_text("⚠️ Ошибка доступа к таблице.")
+                    return
+                
+                records = sheet.get_all_records()
+                now = datetime.now()
+                
+                if query.data == "stats_today":
+                    period_name = "СЕГОДНЯ"
+                    start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                elif query.data == "stats_week":
+                    period_name = "ЗА НЕДЕЛЮ"
+                    start_date = now - timedelta(days=7)
+                else:
+                    period_name = "ЗА МЕСЯЦ"
+                    start_date = now - timedelta(days=30)
+                
+                # Фильтруем по дате
+                period_records = []
+                for r in records:
+                    date_str = r.get("Дата", "")
+                    if date_str:
+                        try:
+                            order_date = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
+                            if order_date >= start_date:
+                                period_records.append(r)
+                        except:
+                            pass
+                
+                total = len(period_records)
+                completed = [r for r in period_records if r.get("Статус") == "Выполнен"]
+                revenue = sum(int(r.get("Сумма RUB", 0) or 0) for r in completed)
+                
+                # По статусам
+                statuses = {}
+                for r in period_records:
+                    status = r.get("Статус", "Неизвестен")
+                    statuses[status] = statuses.get(status, 0) + 1
+                
+                msg = (
+                    f"📊 <b>СТАТИСТИКА {period_name}</b>\n\n"
+                    f"📦 Заказов: <b>{total}</b>\n"
+                    f"✅ Выполнено: <b>{len(completed)}</b>\n"
+                    f"💰 Выручка: <b>{fmt(revenue)} ₽</b>\n\n"
+                    f"<b>По статусам:</b>\n"
+                )
+                for status, count in statuses.items():
+                    msg += f"• {status}: <b>{count}</b>\n"
+                
+                await query.edit_message_text(
+                    msg,
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="admin_stats")]]),
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"Ошибка получения статистики за период: {e}")
+                await query.edit_message_text("⚠️ Ошибка получения статистики.")
+
+        # === СТАТИСТИКА ПО КЛИЕНТАМ ===
+        elif query.data == "stats_clients":
+            if query.from_user.id != ADMIN_ID:
+                return
+            try:
+                sheet = get_sheet()
+                if not sheet:
+                    await query.edit_message_text("⚠️ Ошибка доступа к таблице.")
+                    return
+                
+                records = sheet.get_all_records()
+                
+                # Группируем по клиентам
+                clients = {}
+                for r in records:
+                    user_id = str(r.get("ID", ""))
+                    username = r.get("Username", "Неизвестен")
+                    if user_id:
+                        if user_id not in clients:
+                            clients[user_id] = {"username": username, "orders": 0, "revenue": 0}
+                        clients[user_id]["orders"] += 1
+                        if r.get("Статус") == "Выполнен":
+                            clients[user_id]["revenue"] += int(r.get("Сумма RUB", 0) or 0)
+                
+                # Топ 10 по выручке
+                top_clients = sorted(clients.items(), key=lambda x: x[1]["revenue"], reverse=True)[:10]
+                
+                msg = (
+                    f"👥 <b>СТАТИСТИКА ПО КЛИЕНТАМ</b>\n\n"
+                    f"Всего клиентов: <b>{len(clients)}</b>\n\n"
+                    f"<b>🏆 ТОП-10 по выручке:</b>\n"
+                )
+                for i, (user_id, data) in enumerate(top_clients, 1):
+                    msg += f"{i}. {data['username']} — {fmt(data['revenue'])} ₽ ({data['orders']} заказов)\n"
+                
+                await query.edit_message_text(
+                    msg,
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="admin_stats")]]),
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"Ошибка получения статистики клиентов: {e}")
+                await query.edit_message_text("⚠️ Ошибка получения статистики.")
+
+        # === СТАТИСТИКА ПО ТАРИФАМ ===
+        elif query.data == "stats_tariffs":
+            if query.from_user.id != ADMIN_ID:
+                return
+            try:
+                sheet = get_sheet()
+                if not sheet:
+                    await query.edit_message_text("⚠️ Ошибка доступа к таблице.")
+                    return
+                
+                records = sheet.get_all_records()
+                
+                # Группируем по тарифам
+                tariffs = {}
+                for r in records:
+                    tariff = r.get("Тариф", "Неизвестен")
+                    if tariff not in tariffs:
+                        tariffs[tariff] = {"count": 0, "revenue": 0}
+                    tariffs[tariff]["count"] += 1
+                    if r.get("Статус") == "Выполнен":
+                        tariffs[tariff]["revenue"] += int(r.get("Сумма RUB", 0) or 0)
+                
+                # Сортируем по популярности
+                sorted_tariffs = sorted(tariffs.items(), key=lambda x: x[1]["count"], reverse=True)
+                
+                msg = "💰 <b>СТАТИСТИКА ПО ТАРИФАМ</b>\n\n"
+                for tariff, data in sorted_tariffs:
+                    msg += f"• <b>{tariff}</b>: {data['count']} заказов, {fmt(data['revenue'])} ₽\n"
+                
+                # Средняя сумма пополнения
+                all_kzt = [int(r.get("Сумма KZT", 0) or 0) for r in records if r.get("Сумма KZT")]
+                avg_kzt = int(sum(all_kzt) / len(all_kzt)) if all_kzt else 0
+                
+                msg += f"\n📊 Средняя сумма пополнения: <b>{fmt(avg_kzt)} KZT</b>"
+                
+                await query.edit_message_text(
+                    msg,
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="admin_stats")]]),
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"Ошибка получения статистики тарифов: {e}")
+                await query.edit_message_text("⚠️ Ошибка получения статистики.")
 
         # === АДМИН-ПАНЕЛЬ: УПРАВЛЕНИЕ СТАТУСАМИ ===
         elif query.data == "admin_manage_orders":
