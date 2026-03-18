@@ -122,44 +122,44 @@ AWAITING_SCREENSHOT = TimedDict(max_age_seconds=86400)  # user_id: order_number
 AWAITING_EMAIL = TimedDict(max_age_seconds=86400)  # user_id: order_number (ожидание почты Apple ID)
 
 # === АНТИСПАМ ===
-USER_LAST_ORDER = {}  # user_id: timestamp последнего заказа
+USER_ORDER_TIMES = {}  # user_id: [timestamp1, timestamp2, ...] — время создания заказов
 ORDER_COOLDOWN = 60  # Минимум 60 секунд между заказами
-MAX_ACTIVE_ORDERS = 3  # Максимум активных заказов на пользователя
+MAX_ORDERS_IN_PERIOD = 3  # Максимум заказов за период
+ORDER_PERIOD = 1200  # Период в секундах (20 минут)
 
 
 def check_spam(user_id: int) -> tuple[bool, str]:
     """Проверка на спам. Возвращает (можно_создать, сообщение_ошибки)"""
     now = time.time()
     
-    # Проверка кулдауна
-    if user_id in USER_LAST_ORDER:
-        elapsed = now - USER_LAST_ORDER[user_id]
+    # Очищаем старые записи
+    if user_id in USER_ORDER_TIMES:
+        USER_ORDER_TIMES[user_id] = [t for t in USER_ORDER_TIMES[user_id] if now - t < ORDER_PERIOD]
+    
+    # Проверка кулдауна (60 сек между заказами)
+    if user_id in USER_ORDER_TIMES and USER_ORDER_TIMES[user_id]:
+        last_order = max(USER_ORDER_TIMES[user_id])
+        elapsed = now - last_order
         if elapsed < ORDER_COOLDOWN:
             wait = int(ORDER_COOLDOWN - elapsed)
             return False, f"⏳ Подождите {wait} сек. перед созданием нового заказа."
     
-    # Проверка лимита активных заказов
-    try:
-        current_sheet = get_sheet()
-        if current_sheet:
-            records = current_sheet.get_all_records()
-            active_statuses = ["Новый", "Ожидание оплаты", "Оплачен", "В обработке"]
-            active_orders = [
-                r for r in records 
-                if str(r.get("ID", "")) == str(user_id) 
-                and r.get("Статус", "") in active_statuses
-            ]
-            if len(active_orders) >= MAX_ACTIVE_ORDERS:
-                return False, f"❌ У вас уже {len(active_orders)} активных заказов. Дождитесь их завершения."
-    except Exception as e:
-        logger.error(f"Ошибка проверки лимита заказов: {e}")
+    # Проверка лимита (макс 3 заказа за 20 минут)
+    if user_id in USER_ORDER_TIMES:
+        if len(USER_ORDER_TIMES[user_id]) >= MAX_ORDERS_IN_PERIOD:
+            oldest = min(USER_ORDER_TIMES[user_id])
+            wait_mins = int((ORDER_PERIOD - (now - oldest)) / 60) + 1
+            return False, f"❌ Лимит заказов. Попробуйте через {wait_mins} мин."
     
     return True, ""
 
 
 def mark_order_created(user_id: int):
     """Отмечает время создания заказа"""
-    USER_LAST_ORDER[user_id] = time.time()
+    now = time.time()
+    if user_id not in USER_ORDER_TIMES:
+        USER_ORDER_TIMES[user_id] = []
+    USER_ORDER_TIMES[user_id].append(now)
 
 
 # === GOOGLE SHEETS ===
