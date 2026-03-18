@@ -135,7 +135,7 @@ def get_sheet():
             scope
         )
         client = gspread.authorize(creds)
-        sheet = client.open("Pay&UsetgBot").sheet1
+        sheet = client.open("popolnyaska_bot").sheet1
         logger.info("✅ Подключение к Google Sheets успешно")
         return sheet
     except Exception as e:
