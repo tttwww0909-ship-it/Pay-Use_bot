@@ -450,7 +450,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             resize_keyboard=True
         )
         await update.message.reply_text(
-            "Добро пожаловать в Pay&Use! 🚀\n\n"
+            "Добро пожаловать в Popolnyashka! 🚀\n\n"
             "Пополнение Apple ID в Казахстане.",
             reply_markup=reply_keyboard
         )
