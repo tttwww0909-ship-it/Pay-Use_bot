@@ -119,6 +119,7 @@ ORDER_USER_MAP = TimedDict(max_age_seconds=86400)  # 24 часа
 PAYMENT_MAP = TimedDict(max_age_seconds=3600)  # 1 час
 ORDER_INFO_MAP = TimedDict(max_age_seconds=604800)  # 7 дней
 ORDER_LOCK = {}  # Защита от дублей: {order_number: True}
+AWAITING_SCREENSHOT = TimedDict(max_age_seconds=86400)  # user_id: order_number
 
 
 # === GOOGLE SHEETS ===
@@ -676,7 +677,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.edit_message_text("❌ Ошибка получения курса. Попробуйте позже.")
                 return
             
-            rub = int(amount * rate * 1.11)
+            rub = int(amount * rate * 1.15)
             order_number = generate_order()
             
             if not order_number:
@@ -712,10 +713,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Сервис: <b>{service_name}</b>\n"
                 f"Тариф: <b>{tariff_name}</b>\n"
                 f"Стоимость: <b>{fmt(amount)} KZT</b>\n"
-                f"Итоговая сумма: <b>{fmt(rub)} ₽</b> (11% комиссия)\n\n"
-                f"<i>Нажимая «Продолжить», вы подтверждаете ознакомление и полное согласие с условиями "
-                f"<a href='https://telegra.ph/Publichnaya-oferta-servisa-PayUse-03-16'>публичной оферты</a> и "
-                f"<a href='https://telegra.ph/Politika-konfidencialnosti-PayUse-03-16'>политикой конфиденциальности</a>.</i>",
+                f"Итоговая сумма: <b>{fmt(rub)} ₽</b> (15% комиссия)",
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode="HTML",
                 disable_web_page_preview=True
@@ -947,27 +945,27 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             order = context.user_data.get("order")
             amount_usdt = context.user_data.get("amount_usdt", 0)
 
+            # Включаем режим ожидания скриншота
+            AWAITING_SCREENSHOT[user_id] = order_number
+
             await query.edit_message_text(
                 f"⏳ Заявка на проверку отправлена!\n\n"
                 f"Заказ: <b>{order_number}</b>\n"
                 f"Сумма: <b>{amount_usdt} USDT</b>\n\n"
-                f"📸 <b>Отправьте скриншот подтверждения оплаты</b> менеджеру, чтобы он сменил статус вашей заявки.",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📤 Отправить подтверждение", url=f"tg://user?id={ADMIN_ID}")]
-                ]),
+                f"📸 <b>Отправьте скриншот подтверждения оплаты</b> прямо в этот чат.\n"
+                f"Скриншот будет автоматически переслан менеджеру.",
                 parse_mode="HTML"
             )
 
             # Уведомляем админа
             try:
-                username_text = f'@{query.from_user.username}' if query.from_user.username else 'Нет'
-                username_link = f'<a href="https://t.me/{query.from_user.username}">@{query.from_user.username}</a>' if query.from_user.username else query.from_user.first_name or 'Клиент'
                 service = order["service"] if order else "N/A"
                 tariff = order["tariff"] if order else "N/A"
 
                 admin_keyboard = [
                     [InlineKeyboardButton("✅ Подтвердить оплату", callback_data=f"admin_set_status_{order_number}_paid")],
                     [InlineKeyboardButton("❌ Отклонить", callback_data=f"admin_set_status_{order_number}_cancelled")],
+                    [InlineKeyboardButton("✔️ Выполнен", callback_data=f"admin_set_status_{order_number}_completed")],
                     [InlineKeyboardButton("💬 Написать клиенту", url=f"tg://user?id={user_id}")]
                 ]
 
@@ -982,7 +980,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"Имя: {query.from_user.first_name or 'Неизвестно'}\n"
                     f"Ник: @{query.from_user.username if query.from_user.username else 'нет'}\n"
                     f"ID: <code>{user_id}</code>\n\n"
-                    f"⚠️ Проверьте поступление в Bybit и выберите действие:",
+                    f"⏳ Ожидается скриншот от клиента...",
                     reply_markup=InlineKeyboardMarkup(admin_keyboard),
                     parse_mode="HTML"
                 )
@@ -997,14 +995,15 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             order = context.user_data.get("order")
             amount_rub = order["rub"] if order else 0
 
+            # Включаем режим ожидания скриншота
+            AWAITING_SCREENSHOT[user_id] = order_number
+
             await query.edit_message_text(
                 f"⏳ Заявка на проверку отправлена!\n\n"
                 f"Заказ: <b>{order_number}</b>\n"
                 f"Сумма: <b>{fmt(amount_rub)} ₽</b>\n\n"
-                f"📸 <b>Отправьте скриншот подтверждения оплаты</b> менеджеру, чтобы он сменил статус вашей заявки.",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📤 Отправить подтверждение", url=f"tg://user?id={ADMIN_ID}")]
-                ]),
+                f"📸 <b>Отправьте скриншот подтверждения оплаты</b> прямо в этот чат.\n"
+                f"Скриншот будет автоматически переслан менеджеру.",
                 parse_mode="HTML"
             )
 
@@ -1016,6 +1015,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 admin_keyboard = [
                     [InlineKeyboardButton("✅ Подтвердить оплату", callback_data=f"admin_set_status_{order_number}_paid")],
                     [InlineKeyboardButton("❌ Отклонить", callback_data=f"admin_set_status_{order_number}_cancelled")],
+                    [InlineKeyboardButton("✔️ Выполнен", callback_data=f"admin_set_status_{order_number}_completed")],
                     [InlineKeyboardButton("💬 Написать клиенту", url=f"tg://user?id={user_id}")]
                 ]
 
@@ -1030,7 +1030,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"Имя: {query.from_user.first_name or 'Неизвестно'}\n"
                     f"Ник: @{query.from_user.username if query.from_user.username else 'нет'}\n"
                     f"ID: <code>{user_id}</code>\n\n"
-                    f"⚠️ Проверьте поступление в ЮMoney и выберите действие:",
+                    f"⏳ Ожидается скриншот от клиента...",
                     reply_markup=InlineKeyboardMarkup(admin_keyboard),
                     parse_mode="HTML"
                 )
@@ -1045,27 +1045,27 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             order = context.user_data.get("order")
             amount_rub = order["rub"] if order else 0
 
+            # Включаем режим ожидания скриншота
+            AWAITING_SCREENSHOT[user_id] = order_number
+
             await query.edit_message_text(
                 f"⏳ Заявка на проверку отправлена!\n\n"
                 f"Заказ: <b>{order_number}</b>\n"
                 f"Сумма: <b>{fmt(amount_rub)} ₽</b>\n\n"
-                f"📸 <b>Отправьте скриншот подтверждения оплаты</b> менеджеру, чтобы он сменил статус вашей заявки.",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📤 Отправить подтверждение", url=f"tg://user?id={ADMIN_ID}")]
-                ]),
+                f"📸 <b>Отправьте скриншот подтверждения оплаты</b> прямо в этот чат.\n"
+                f"Скриншот будет автоматически переслан менеджеру.",
                 parse_mode="HTML"
             )
 
             # Уведомляем админа
             try:
-                username_text = f'@{query.from_user.username}' if query.from_user.username else 'Нет'
-                username_link = f'<a href="https://t.me/{query.from_user.username}">@{query.from_user.username}</a>' if query.from_user.username else query.from_user.first_name or 'Клиент'
                 service = order["service"] if order else "N/A"
                 tariff = order["tariff"] if order else "N/A"
 
                 admin_keyboard = [
                     [InlineKeyboardButton("✅ Подтвердить оплату", callback_data=f"admin_set_status_{order_number}_paid")],
                     [InlineKeyboardButton("❌ Отклонить", callback_data=f"admin_set_status_{order_number}_cancelled")],
+                    [InlineKeyboardButton("✔️ Выполнен", callback_data=f"admin_set_status_{order_number}_completed")],
                     [InlineKeyboardButton("💬 Написать клиенту", url=f"tg://user?id={user_id}")]
                 ]
 
@@ -1080,7 +1080,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"Имя: {query.from_user.first_name or 'Неизвестно'}\n"
                     f"Ник: @{query.from_user.username if query.from_user.username else 'нет'}\n"
                     f"ID: <code>{user_id}</code>\n\n"
-                    f"⚠️ Проверьте поступление в OZON банке и выберите действие:",
+                    f"⏳ Ожидается скриншот от клиента...",
                     reply_markup=InlineKeyboardMarkup(admin_keyboard),
                     parse_mode="HTML"
                 )
@@ -1485,6 +1485,64 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
 
 
+async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка скриншотов от клиентов"""
+    user_id = update.message.from_user.id
+    
+    try:
+        # Проверяем, ожидаем ли скриншот от этого пользователя
+        order_number = AWAITING_SCREENSHOT.get(user_id)
+        
+        if not order_number:
+            return  # Не ожидаем скриншот, игнорируем фото
+        
+        # Получаем информацию о заказе
+        order_info = ORDER_INFO_MAP.get(order_number, {})
+        
+        # Пересылаем фото админу с информацией о заказе
+        try:
+            await context.bot.send_photo(
+                ADMIN_ID,
+                photo=update.message.photo[-1].file_id,  # Берём самое большое фото
+                caption=(
+                    f"📸 <b>Скриншот оплаты!</b>\n\n"
+                    f"<b>📦 Заказ:</b> {order_number}\n"
+                    f"<b>Сервис:</b> {order_info.get('service', 'N/A')}\n"
+                    f"<b>Тариф:</b> {order_info.get('tariff', 'N/A')}\n"
+                    f"<b>Сумма:</b> {fmt(order_info.get('rub', 0))} ₽\n\n"
+                    f"<b>👤 Клиент:</b>\n"
+                    f"Имя: {update.message.from_user.first_name or 'Неизвестно'}\n"
+                    f"Ник: @{update.message.from_user.username if update.message.from_user.username else 'нет'}\n"
+                    f"ID: <code>{user_id}</code>"
+                ),
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ Подтвердить оплату", callback_data=f"admin_set_status_{order_number}_paid")],
+                    [InlineKeyboardButton("❌ Отклонить", callback_data=f"admin_set_status_{order_number}_cancelled")],
+                    [InlineKeyboardButton("✔️ Выполнен", callback_data=f"admin_set_status_{order_number}_completed")],
+                    [InlineKeyboardButton("💬 Написать клиенту", url=f"tg://user?id={user_id}")]
+                ]),
+                parse_mode="HTML"
+            )
+            logger.info(f"Скриншот от {user_id} переслан админу для заказа {order_number}")
+        except Exception as e:
+            logger.error(f"Ошибка пересылки скриншота админу: {e}")
+        
+        # Подтверждаем клиенту
+        await update.message.reply_text(
+            f"✅ <b>Скриншот получен!</b>\n\n"
+            f"Заказ: <b>{order_number}</b>\n\n"
+            f"Ваш скриншот отправлен на проверку менеджеру.\n"
+            f"Ожидайте подтверждения оплаты.",
+            parse_mode="HTML"
+        )
+        
+        # Убираем из ожидания (можно оставить для повторных скриншотов)
+        # del AWAITING_SCREENSHOT[user_id]
+        
+    except Exception as e:
+        logger.error(f"Ошибка в photo_handler: {e}")
+
+
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка текстовых сообщений"""
     user_id = update.message.from_user.id
@@ -1505,7 +1563,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text("❌ Ошибка получения курса. Попробуйте позже.")
                     return
                 
-                rub = int(amount * rate * 1.11)
+                rub = int(amount * rate * 1.15)
                 order_number = generate_order()
                 
                 if not order_number:
@@ -1537,10 +1595,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"Сервис: {service_name}\n"
                     f"Тариф: {tariff_name}\n"
                     f"Стоимость: <b>{fmt(amount)} KZT</b>\n"
-                    f"Итоговая сумма: <b>{fmt(rub)} ₽</b> (11% комиссия)\n\n"
-                    f"<i>Нажимая «Продолжить», вы подтверждаете ознакомление и полное согласие с условиями "
-                    f"<a href='https://telegra.ph/Publichnaya-oferta-servisa-PayUse-03-16'>публичной оферты</a> и "
-                    f"<a href='https://telegra.ph/Politika-konfidencialnosti-PayUse-03-16'>политикой конфиденциальности</a>.</i>",
+                    f"Итоговая сумма: <b>{fmt(rub)} ₽</b> (15% комиссия)",
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode="HTML",
                     disable_web_page_preview=True
@@ -1741,6 +1796,7 @@ if __name__ == "__main__":
     app.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
     app.add_handler(CallbackQueryHandler(buttons))
+    app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
     app.add_error_handler(error_handler)
 
