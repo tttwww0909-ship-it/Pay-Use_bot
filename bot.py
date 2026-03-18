@@ -119,6 +119,7 @@ PAYMENT_MAP = TimedDict(max_age_seconds=3600)  # 1 час
 ORDER_INFO_MAP = TimedDict(max_age_seconds=604800)  # 7 дней
 ORDER_LOCK = {}  # Защита от дублей: {order_number: True}
 AWAITING_SCREENSHOT = TimedDict(max_age_seconds=86400)  # user_id: order_number
+AWAITING_EMAIL = TimedDict(max_age_seconds=86400)  # user_id: order_number (ожидание почты Apple ID)
 
 
 # === GOOGLE SHEETS ===
@@ -1336,12 +1337,16 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 if user_id:
                     status_messages = {
-                        "paid": "💰 Ваша оплата подтверждена! Заказ в обработке.",
+                        "paid": "💰 Ваша оплата подтверждена! Заказ в обработке.\n\n📧 Пожалуйста, отправьте вашу почту Apple ID (email), на которую нужно выполнить пополнение:",
                         "processing": "⏳ Ваш заказ обрабатывается. Ожидайте уведомления.",
                         "completed": "✅ Ваш заказ выполнен! Спасибо за покупку.",
                         "cancelled": "❌ Ваш заказ отменён. Если есть вопросы — свяжитесь с поддержкой."
                     }
                     client_message = status_messages.get(new_status, f"Статус заказа изменён на: {status_name}")
+                    
+                    # Если оплата подтверждена — запрашиваем почту
+                    if new_status == "paid":
+                        AWAITING_EMAIL[user_id] = order_num
                     
                     try:
                         await context.bot.send_message(
@@ -1465,6 +1470,51 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
 
     try:
+        # === ОБРАБОТКА ПОЧТЫ APPLE ID ===
+        if user_id in AWAITING_EMAIL:
+            order_number = AWAITING_EMAIL.get(user_id)
+            email = text.lower()
+            
+            # Простая проверка на email
+            if "@" in email and "." in email:
+                # Убираем из ожидания
+                del AWAITING_EMAIL[user_id]
+                
+                # Получаем информацию о пользователе
+                user = update.message.from_user
+                user_name = user.full_name or "Без имени"
+                username = f"@{user.username}" if user.username else "Нет username"
+                
+                # Уведомляем админа
+                try:
+                    await context.bot.send_message(
+                        ADMIN_ID,
+                        f"📧 <b>Получена почта Apple ID</b>\n\n"
+                        f"📦 Заказ: <b>{order_number}</b>\n"
+                        f"📧 Почта: <code>{email}</code>\n\n"
+                        f"👤 Клиент:\n"
+                        f"Имя: {user_name}\n"
+                        f"Ник: {username}\n"
+                        f"ID: <code>{user_id}</code>",
+                        parse_mode="HTML"
+                    )
+                except Exception as e:
+                    logger.error(f"Ошибка отправки почты админу: {e}")
+                
+                await update.message.reply_text(
+                    f"✅ Почта <b>{email}</b> получена!\n\n"
+                    f"📦 Заказ: <b>{order_number}</b>\n\n"
+                    f"Мы пополним ваш Apple ID в ближайшее время. Ожидайте уведомления!",
+                    parse_mode="HTML"
+                )
+                logger.info(f"Клиент {user_id} отправил почту {email} для заказа {order_number}")
+                return
+            else:
+                await update.message.reply_text(
+                    "❌ Некорректный email. Пожалуйста, отправьте правильную почту Apple ID:"
+                )
+                return
+
         # === ОБРАБОТКА КНОПОК REPLY KEYBOARD ===
         if text == "🍎 Пополнить Apple ID":
             keyboard = [
