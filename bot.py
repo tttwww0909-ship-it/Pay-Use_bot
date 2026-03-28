@@ -18,11 +18,9 @@ from database import db
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
-PAYMENT_PROVIDER_TOKEN = os.getenv("PAYMENT_PROVIDER_TOKEN")
 BYBIT_API_KEY = os.getenv("BYBIT_API_KEY")
 BYBIT_API_SECRET = os.getenv("BYBIT_API_SECRET")
 YOOMONEY_WALLET = os.getenv("YOOMONEY_WALLET", "")
-YOOMONEY_SECRET = os.getenv("YOOMONEY_SECRET", "")
 
 # Платёжные реквизиты
 OZON_PAY_URL = os.getenv("OZON_PAY_URL", "")
