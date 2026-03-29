@@ -292,10 +292,10 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if query.data == "apple_topup":
             keyboard = [
                 [InlineKeyboardButton("🇺🇸 США", callback_data="region_US")],
-                [InlineKeyboardButton("🇦🇪 ОАЭ", callback_data="region_AE")],
-                [InlineKeyboardButton("🇹🇷 Турция", callback_data="region_TR")],
+                [InlineKeyboardButton("�🇷 Турция", callback_data="region_TR")],
                 [InlineKeyboardButton("🇰🇿 Казахстан", callback_data="region_KZ")],
-                [InlineKeyboardButton("🇸🇦 Саудовская Аравия", callback_data="region_SA")]
+                [InlineKeyboardButton("🇦🇪 ОАЭ Premium", callback_data="region_AE")],
+                [InlineKeyboardButton("🇸🇦 Саудовская Аравия Premium", callback_data="region_SA")]
             ]
             await query.edit_message_text(
                 "🍏 Пополнение Apple ID\n\nВыбери регион своего Apple ID:",
@@ -314,6 +314,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
             await query.edit_message_text(
                 "🇰🇿 Казахстан — Пополнение Apple ID\n\n"
+                "🌟 <i>Ваш эксклюзив с ручным пополнением.</i>\n\n"
                 "Выбери сумму пополнения:\n\n"
                 "⚠️ <b>Важно:</b> <i>App Store в Казахстане начисляет НДС (12%) сверх цены подписки. "
                 "Если пополнить ровно на стоимость подписки — после списания налога баланс уйдёт в минус и платёж не пройдёт.</i>",
@@ -395,7 +396,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("✅ Продолжить", callback_data=f"confirm_{order_number}")],
                 [InlineKeyboardButton("❌ Отмена", callback_data=f"region_{region_code}")]
             ]
-            hint = GIFT_CARD_HINTS.get(region_code, {}).get(t_amount)
+            _hints_r = GIFT_CARD_HINTS.get(region_code, {})
+            hint = _hints_r.get(t_amount) or _hints_r.get("_default")
             hint_line = f"\n💡 <i>Этого номинала хватит на: {hint}.</i>" if hint else ""
             await query.edit_message_text(
                 f"📦 Информация о заказе\n\n"
@@ -450,11 +452,14 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("✅ Продолжить", callback_data=f"confirm_{order_number}")],
                 [InlineKeyboardButton("❌ Отмена", callback_data="apple_topup")]
             ]
+            kz_hint = GIFT_CARD_HINTS.get("KZ", {}).get(amount)
+            hint_line = f"\n💡 <i>Этого номинала хватит на: {kz_hint}.</i>" if kz_hint else ""
             await query.edit_message_text(
                 f"📦 Информация о заказе\n\n"
                 f"Номер заказа: <b>{order_number}</b>\n"
                 f"Тариф: <b>{tariff_name}</b>\n"
-                f"Сумма к оплате: <b>{fmt(rub)} ₽</b> (сервисный сбор {commission_pct}%)",
+                f"Сумма к оплате: <b>{fmt(rub)} ₽</b> (сервисный сбор {commission_pct}%)"
+                f"{hint_line}",
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode="HTML"
             )
@@ -1421,10 +1426,10 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if text == "🍏 Пополнить Apple ID":
             keyboard = [
                 [InlineKeyboardButton("🇺🇸 США", callback_data="region_US")],
-                [InlineKeyboardButton("🇦🇪 ОАЭ", callback_data="region_AE")],
-                [InlineKeyboardButton("🇹🇷 Турция", callback_data="region_TR")],
+                [InlineKeyboardButton("�🇷 Турция", callback_data="region_TR")],
                 [InlineKeyboardButton("🇰🇿 Казахстан", callback_data="region_KZ")],
-                [InlineKeyboardButton("🇸🇦 Саудовская Аравия", callback_data="region_SA")]
+                [InlineKeyboardButton("🇦🇪 ОАЭ Premium", callback_data="region_AE")],
+                [InlineKeyboardButton("🇸🇦 Саудовская Аравия Premium", callback_data="region_SA")]
             ]
             await update.message.reply_text(
                 "🍏 Пополнение Apple ID\n\nВыбери регион своего Apple ID:",
