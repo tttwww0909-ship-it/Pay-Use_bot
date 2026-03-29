@@ -534,28 +534,21 @@ def bybit_signature(timestamp, api_key, secret, recv_window, body_str):
 
 async def send_review_for_moderation(bot, review_id: int, user_id: int, username: str,
                                       order_num: str, rating: int, comment: str | None):
-    """Отправляет отзыв админу на модерацию с кнопками Одобрить/Отклонить"""
+    """Отправляет отзыв админу для информации"""
     stars = "⭐" * rating
     comment_text = f"\n💬 Комментарий: <i>{comment}</i>" if comment else "\n💬 Комментарий: —"
     try:
         await bot.send_message(
             ADMIN_ID,
-            f"⭐ <b>Новый отзыв на модерацию</b>\n\n"
+            f"⭐ <b>Новый отзыв</b>\n\n"
             f"📦 Заказ: <b>{order_num}</b>\n"
             f"👤 Клиент: @{username} (ID: <code>{user_id}</code>)\n"
             f"Оценка: {stars}"
-            f"{comment_text}\n\n"
-            f"<i>Опубликовать в канале @popolnyaskareviews?</i>",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("✅ Опубликовать", callback_data=f"review_approve_{review_id}"),
-                    InlineKeyboardButton("❌ Отклонить", callback_data=f"review_reject_{review_id}")
-                ]
-            ])
+            f"{comment_text}",
+            parse_mode="HTML"
         )
     except Exception as e:
-        logger.error(f"Ошибка отправки отзыва на модерацию: {e}")
+        logger.error(f"Ошибка отправки отзыва админу: {e}")
 
 
 def create_bybit_payment(order_number, amount_usdt, service_name, tariff_name):
@@ -756,7 +749,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [
                 [KeyboardButton("🍏 Пополнить Apple ID")],
                 [KeyboardButton("📋 Заказы"), KeyboardButton("❓ FAQ")],
-                [KeyboardButton("⭐ Отзывы")]
             ],
             resize_keyboard=True
         )
@@ -865,7 +857,6 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("🍏 Пополнить Apple ID", callback_data="apple_topup")],
                 [InlineKeyboardButton("📋 Мои заказы", callback_data="my_orders")],
                 [InlineKeyboardButton("❓ FAQ", callback_data="faq_menu")],
-                [InlineKeyboardButton("⭐ Отзывы", url="https://t.me/popolnyaskareviews")]
             ]
             await query.edit_message_text(
                 "🍏 Главное меню\n\n"
@@ -874,9 +865,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # === ОТЗЫВЫ (редирект на канал) ===
+        # === ОТЗЫВЫ (редирект убран) ===
         if query.data == "reviews":
-            await query.answer("Открываю канал с отзывами...", show_alert=False)
             return
 
         # === FAQ МЕНЮ ===
@@ -2097,64 +2087,6 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="HTML"
             )
 
-        # === МОДЕРАЦИЯ ОТЗЫВОВ (только для админа) ===
-        elif query.data.startswith("review_approve_"):
-            if query.from_user.id != ADMIN_ID:
-                await query.answer("Нет доступа", show_alert=True)
-                return
-            review_id = int(query.data.replace("review_approve_", ""))
-            review = db.get_review_by_id(review_id)
-            if not review:
-                await query.edit_message_text("❌ Отзыв не найден в базе.")
-                return
-            db.update_review_status(review_id, "approved")
-            rating = review["rating"]
-            stars = "⭐" * rating
-            empty_stars = "☆" * (5 - rating)
-            username = review.get("username", "Аноним")
-            comment = review.get("comment")
-
-            NO_COMMENT_PHRASES = {
-                1: "🚢💥 «Корабль ожиданий разбился о скалы реальности»",
-                2: "🚪😶 «Зашёл с надеждой, ушёл с вопросами»",
-                3: "🤷 «Ну... могло быть хуже, могло быть лучше»",
-                4: "🔄👀 «Было хорошо — вернусь проверить»",
-                5: "🏆🔥 «Всё на высшем уровне!»",
-            }
-
-            if comment:
-                quote = f"💬 <i>«{comment}»</i>"
-            else:
-                quote = NO_COMMENT_PHRASES.get(rating, "")
-
-            # Публикуем в канал
-            try:
-                await context.bot.send_message(
-                    REVIEWS_CHANNEL,
-                    f"{stars}{empty_stars}\n\n"
-                    f"{quote}\n\n"
-                    f"— <b>@{username}</b>",
-                    parse_mode="HTML"
-                )
-                await query.edit_message_text(
-                    f"✅ Отзыв #{review_id} опубликован в канале.",
-                    parse_mode="HTML"
-                )
-            except Exception as e:
-                logger.error(f"Ошибка публикации отзыва в канал: {e}")
-                await query.edit_message_text(f"❌ Ошибка публикации: {e}")
-
-        elif query.data.startswith("review_reject_"):
-            if query.from_user.id != ADMIN_ID:
-                await query.answer("Нет доступа", show_alert=True)
-                return
-            review_id = int(query.data.replace("review_reject_", ""))
-            db.update_review_status(review_id, "rejected")
-            await query.edit_message_text(
-                f"❌ Отзыв #{review_id} отклонён.",
-                parse_mode="HTML"
-            )
-
         # === НАЗАД В АДМИН-ПАНЕЛЬ ===
         elif query.data == "back_to_admin":
             if query.from_user.id != ADMIN_ID:
@@ -2416,30 +2348,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "🍏 Пополнение Apple ID\n\n"
                 "Выбери регион своего Apple ID:",
                 reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            return
-
-        if text == "⭐ Отзывы":
-            recent_reviews = db.get_recent_reviews(limit=5)
-            if recent_reviews:
-                reviews_text = ""
-                for r in recent_reviews:
-                    stars = "⭐" * r["rating"]
-                    comment_line = f"\n<i>\"{r['comment']}\"</i>\n" if r.get("comment") else "\n"
-                    reviews_text += f"{stars}{comment_line}— {r['username']}\n\n"
-            else:
-                reviews_text = "<i>Отзывов пока нет. Будьте первым!</i>\n\n"
-            keyboard = [
-                [InlineKeyboardButton("📢 Наш канал", url="https://t.me/popolnyaskachannel")]
-            ]
-            await update.message.reply_text(
-                "⭐ <b>Отзывы наших клиентов</b>\n\n"
-                "━━━━━━━━━━━━━━━━━━\n\n"
-                f"{reviews_text}"
-                "━━━━━━━━━━━━━━━━━━\n\n"
-                "💬 Отзыв можно оставить после завершения заказа",
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode="HTML"
             )
             return
 
