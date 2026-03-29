@@ -312,6 +312,37 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+        if query.data == "vip_usdt_guide":
+            await query.edit_message_text(
+                "💳 <b>Как оплатить через Telegram Wallet (за 2 минуты)</b>\n\n"
+                "Оплата заказов от 8 500 ₽ производится в USDT. Это безопасный способ "
+                "оплаты картой любого банка через внутренний сервис Telegram.\n\n"
+                "➕ <b>Шаг 1. Откройте кошелёк</b>\n"
+                "1. В поиске Telegram найдите @wallet\n"
+                "2. Нажмите «Начать» / «Открыть кошелёк»\n\n"
+                "➕ <b>Шаг 2. Покупка USDT (P2P Маркет)</b>\n"
+                "<i>Это покупка крипты у другого человека переводом по карте, под защитой Telegram.</i>\n"
+                "1. В меню кошелька → «P2P Маркет» → «Купить»\n"
+                "2. Выберите <b>USDT</b>, введите сумму заказа в рублях\n"
+                "3. Выберите удобный банк (Сбер, Т-Банк и др.)\n"
+                "4. Фильтр: продавец с рейтингом <b>95%+</b> сделок\n"
+                "5. Нажмите «Купить» и подтвердите сделку\n\n"
+                "➕ <b>Шаг 3. Оплата продавцу</b>\n"
+                "1. Telegram покажет реквизиты карты продавца\n"
+                "2. Перейдите в приложение банка и переведите точную сумму\n"
+                "3. Вернитесь в Telegram и нажмите «Подтвердить оплату»\n"
+                "4. Через 1–3 минуты USDT зачислятся на ваш баланс\n\n"
+                "➕ <b>Шаг 4. Перевод оплаты нам</b>\n"
+                "1. В @wallet → «Отправить» → «Внешний кошелёк»\n"
+                f"2. Сеть: <b>TRON (TRC-20)</b> — комиссия ~1 USDT\n"
+                f"3. Адрес: <code>{TRC20_ADDRESS}</code>\n"
+                "4. Введите сумму USDT из вашего чека и подтвердите отправку\n\n"
+                "✅ <b>Готово!</b> Сделайте скриншот подтверждения и отправьте его в этот чат — оператор выдаст заказ мгновенно.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="back_to_vip_promo")]]),
+                parse_mode="HTML"
+            )
+            return
+
         if query.data == "faq_guide":
             await query.edit_message_text(
                 "💡 Не знаете, сколько купить? Мы подскажем!\n\n"
@@ -335,6 +366,35 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
                 "❓ Часто задаваемые вопросы\n\nВыберите интересующий вопрос:",
                 reply_markup=InlineKeyboardMarkup(FAQ_KEYBOARD)
+            )
+            return
+
+        if query.data == "back_to_vip_promo":
+            order_number = context.user_data.get("vip_order_number")
+            order = context.user_data.get("order")
+            if not order_number or not order:
+                await query.answer("Сессия истекла. Начните заказ заново.", show_alert=True)
+                return
+            usdt_rate = await asyncio.to_thread(get_usdt_rate)
+            rub_discounted = context.user_data.get("rub_discounted", round(order["rub"] * 0.98))
+            saving = order["rub"] - rub_discounted
+            usdt_suffix = f" (~{round(rub_discounted / usdt_rate, 2)} USDT)" if usdt_rate else ""
+            await query.edit_message_text(
+                f"💎 <b>Крупный заказ — особые условия!</b>\n\n"
+                f"Сумма вашего заказа превышает 8 500 ₽. Для обеспечения максимальной "
+                f"безопасности и скорости обработки крупные платежи принимаются в USDT.\n\n"
+                f"<b>Ваши преимущества:</b>\n"
+                f"✅ Скидка 2% — вы экономите <b>{fmt(saving)} ₽</b>\n"
+                f"✅ Итоговая сумма: <b>{fmt(rub_discounted)} ₽</b>{usdt_suffix}\n"
+                f"✅ Приоритетная выдача кода\n"
+                f"✅ Отсутствие рисков блокировки банком\n\n"
+                f"<i>Нет криптокошелька? Оператор поможет за 2 минуты.</i>",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton(f"💎 Оплатить криптой (−2%)", callback_data=f"vip_crypto_{order_number}")],
+                    [InlineKeyboardButton("📱 Как купить USDT за 2 мин?", callback_data="vip_usdt_guide")],
+                    [InlineKeyboardButton("💬 Связаться с оператором", url="https://t.me/popolnyaska_halper")],
+                ]),
+                parse_mode="HTML"
             )
             return
 
@@ -590,12 +650,13 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"<i>Нет криптокошелька? Оператор поможет за 2 минуты.</i>",
                         reply_markup=InlineKeyboardMarkup([
                             [InlineKeyboardButton(f"💎 Оплатить криптой (−2%)", callback_data=f"vip_crypto_{order_number}")],
-                            [InlineKeyboardButton("� Как купить USDT за 2 мин?", callback_data="faq_usdt_guide")],
-                            [InlineKeyboardButton("�💬 Связаться с оператором", url="https://t.me/popolnyaska_halper")],
+                            [InlineKeyboardButton("📱 Как купить USDT за 2 мин?", callback_data="vip_usdt_guide")],
+                            [InlineKeyboardButton("💬 Связаться с оператором", url="https://t.me/popolnyaska_halper")],
                         ]),
                         parse_mode="HTML"
                     )
                     context.user_data["rub_discounted"] = rub_discounted
+                    context.user_data["vip_order_number"] = order_number
                     logger.info(f"Заказ {order_number} — промо VIP-экран (>{8500}₽)")
                 else:
                     pay_buttons = [
