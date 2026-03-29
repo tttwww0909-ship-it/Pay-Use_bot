@@ -205,13 +205,11 @@ MONTH_NAMES = {
 def update_stats_sheet():
     """Полностью обновляет лист 'Статистика' в Google Sheets"""
     try:
-        scope = [
-            "https://spreadsheets.google.com/feeds",
-            "https://www.googleapis.com/auth/drive"
-        ]
-        creds = ServiceAccountCredentials.from_json_keyfile_name("service_account.json", scope)
-        client = gspread.authorize(creds)
-        spreadsheet = client.open("popolnyaska_bot")
+        main_sheet = get_sheet()
+        if not main_sheet:
+            logger.warning("⚠️ Не удалось получить основной лист для статистики")
+            return
+        spreadsheet = main_sheet.spreadsheet
 
         # Получаем лист "Статистика" или создаём
         try:
@@ -220,7 +218,6 @@ def update_stats_sheet():
             stats_ws = spreadsheet.add_worksheet(title="Статистика", rows=100, cols=6)
 
         # Читаем все заказы с основного листа
-        main_sheet = spreadsheet.sheet1
         records = main_sheet.get_all_records()
 
         if not records:
@@ -769,50 +766,9 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # === МОИ ЗАКАЗЫ ===
         if query.data == "my_orders":
             user_id = query.from_user.id
-            
-            try:
-                current_sheet = get_sheet()
-                if not current_sheet:
-                    await query.edit_message_text("⚠️ Ошибка доступа к таблице.")
-                    return
-                
-                records = current_sheet.get_all_records()
-            except Exception as e:
-                logger.error(f"Ошибка получения записей из таблицы: {e}")
-                await query.edit_message_text("⚠️ Ошибка доступа к таблице.")
-                return
-            
-            # Ищем по ID (второй столбец)
-            user_records = [r for r in records if str(r.get("User_ID", "")) == str(user_id)]
-            
-            if not user_records:
-                await query.edit_message_text(
-                    "📋 У вас пока нет заказов.\n\n"
-                    "Нажми «🍏 Пополнить Apple ID» чтобы создать заказ."
-                )
-                logger.info(f"Пользователь {user_id} проверил заказы - нет заказов")
-                return
-            
-            msg = "📋 Ваши заказы:\n\n"
-            
-            for record in user_records:
-                order_num = record.get("Номер ордера", "N/A")
-                tariff = record.get("Тариф", "N/A")
-                rub_amt = record.get("Сумма RUB", "N/A")
-                status = record.get("Статус", "Новый")
-                region = record.get("Регион", "")
-                region_display = REGION_DISPLAY.get(region, region) if region else "—"
-                
-                msg += (
-                    f"🔹 {order_num}\n"
-                    f"   Регион: {region_display}\n"
-                    f"   Тариф: {tariff}\n"
-                    f"   Сумма: {rub_amt} ₽\n"
-                    f"   Статус: {status}\n\n"
-                )
-            
+            ok, msg = await _get_user_orders_msg(user_id)
             await query.edit_message_text(msg)
-            logger.info(f"Пользователь {user_id} просмотрел {len(user_records)} заказов")
+            logger.info(f"Пользователь {user_id} просмотрел заказы")
             return
         
         # === НАЗАД В ГЛАВНОЕ МЕНЮ ===
@@ -2336,46 +2292,9 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         if text == "📋 Заказы":
-            try:
-                current_sheet = get_sheet()
-                if not current_sheet:
-                    await update.message.reply_text("⚠️ Ошибка доступа к таблице.")
-                    return
-                
-                records = current_sheet.get_all_records()
-            except Exception as e:
-                logger.error(f"Ошибка получения записей из таблицы: {e}")
-                await update.message.reply_text("⚠️ Ошибка доступа к таблице.")
-                return
-            
-            user_records = [r for r in records if str(r.get("User_ID", "")) == str(user_id)]
-            
-            if not user_records:
-                await update.message.reply_text(
-                    "📋 У вас пока нет заказов.\n\n"
-                    "Нажми «🍏 Пополнить Apple ID» чтобы создать заказ."
-                )
-                return
-            
-            msg = "📋 Ваши заказы:\n\n"
-            for record in user_records:
-                order_num = record.get("Номер ордера", "N/A")
-                tariff = record.get("Тариф", "N/A")
-                rub_amt = record.get("Сумма RUB", "N/A")
-                status = record.get("Статус", "Ожидает оплаты")
-                region = record.get("Регион", "")
-                region_display = REGION_DISPLAY.get(region, region) if region else "—"
-                
-                msg += (
-                    f"🔹 {order_num}\n"
-                    f"   Регион: {region_display}\n"
-                    f"   Тариф: {tariff}\n"
-                    f"   Сумма: {rub_amt} ₽\n"
-                    f"   Статус: {status}\n\n"
-                )
-            
+            ok, msg = await _get_user_orders_msg(user_id)
             await update.message.reply_text(msg)
-            logger.info(f"Пользователь {user_id} просмотрел {len(user_records)} заказов")
+            logger.info(f"Пользователь {user_id} просмотрел заказы")
             return
 
         # === ВВОД КАСТОМНОЙ СУММЫ ===
@@ -2447,6 +2366,12 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Произошла ошибка. Попробуйте позже.")
 
 
+async def periodic_cleanup(context: ContextTypes.DEFAULT_TYPE):
+    """Периодическая очистка устаревших данных из памяти"""
+    cleanup_memory()
+    logger.info("⏰ Периодическая очистка памяти выполнена")
+
+
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     """Глобальный обработчик ошибок"""
     logger.error(f"Ошибка при обработке запроса: {context.error}")
@@ -2468,6 +2393,9 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
     app.add_error_handler(error_handler)
+
+    # Периодическая очистка памяти — каждый час
+    app.job_queue.run_repeating(periodic_cleanup, interval=3600, first=3600)
 
     async def shutdown(sig=None):
         """Корректное завершение работы бота"""
