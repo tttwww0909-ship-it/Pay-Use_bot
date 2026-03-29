@@ -484,6 +484,113 @@ class Database:
             if conn:
                 conn.close()
 
+    def get_user_orders_by_telegram_id(self, telegram_id: int) -> List[Dict]:
+        """Получает все заказы пользователя по его telegram_id (JOIN users+orders)"""
+        conn = None
+        try:
+            conn = sqlite3.connect(self.db_file)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            c.execute('''
+                SELECT o.* FROM orders o
+                JOIN users u ON o.user_id = u.id
+                WHERE u.telegram_id = ?
+                ORDER BY o.created_at DESC
+            ''', (telegram_id,))
+            return [dict(row) for row in c.fetchall()]
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения заказов по telegram_id: {e}")
+            return []
+        finally:
+            if conn:
+                conn.close()
+
+    def get_recent_orders(self, limit: int = 10) -> List[Dict]:
+        """Получает последние N заказов (для админки)"""
+        conn = None
+        try:
+            conn = sqlite3.connect(self.db_file)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            c.execute('''
+                SELECT o.*, u.telegram_id, u.username
+                FROM orders o
+                JOIN users u ON o.user_id = u.id
+                ORDER BY o.created_at DESC
+                LIMIT ?
+            ''', (limit,))
+            return [dict(row) for row in c.fetchall()]
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения последних заказов: {e}")
+            return []
+        finally:
+            if conn:
+                conn.close()
+
+    def get_active_orders(self, limit: int = 20) -> List[Dict]:
+        """Получает активные заказы (не выполненные/отменённые) для админки"""
+        conn = None
+        try:
+            conn = sqlite3.connect(self.db_file)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            c.execute('''
+                SELECT o.*, u.telegram_id, u.username
+                FROM orders o
+                JOIN users u ON o.user_id = u.id
+                WHERE o.status NOT IN ('Выполнен', 'Отменён')
+                ORDER BY o.created_at DESC
+                LIMIT ?
+            ''', (limit,))
+            return [dict(row) for row in c.fetchall()]
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения активных заказов: {e}")
+            return []
+        finally:
+            if conn:
+                conn.close()
+
+    def get_admin_stats(self) -> Dict:
+        """Получает расширенную статистику из SQLite (для админки)"""
+        conn = None
+        try:
+            conn = sqlite3.connect(self.db_file)
+            c = conn.cursor()
+
+            c.execute("SELECT COUNT(DISTINCT telegram_id) FROM users")
+            unique_users = c.fetchone()[0]
+
+            c.execute("SELECT COUNT(*) FROM orders")
+            total_orders = c.fetchone()[0]
+
+            c.execute("SELECT status, COUNT(*) FROM orders GROUP BY status")
+            statuses = dict(c.fetchall())
+
+            c.execute("SELECT SUM(amount_rub) FROM orders WHERE status = 'Выполнен'")
+            revenue = c.fetchone()[0] or 0
+
+            c.execute("SELECT COUNT(*) FROM orders WHERE status = 'Выполнен'")
+            completed_count = c.fetchone()[0]
+
+            avg_check = int(revenue / completed_count) if completed_count else 0
+            paid_count = statuses.get("Оплачен", 0) + statuses.get("Выполнен", 0)
+            conversion = int(paid_count / total_orders * 100) if total_orders > 0 else 0
+
+            return {
+                "unique_users": unique_users,
+                "total_orders": total_orders,
+                "statuses": statuses,
+                "revenue": revenue,
+                "avg_check": avg_check,
+                "conversion": conversion,
+            }
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения админ-статистики: {e}")
+            return {}
+        finally:
+            if conn:
+                conn.close()
+
     def get_stats(self) -> Dict:
         """Получает статистику"""
         conn = None

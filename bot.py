@@ -1,7 +1,6 @@
 import requests
 import gspread
 import time
-import json
 import logging
 import os
 import asyncio
@@ -16,8 +15,6 @@ from database import db
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
-BYBIT_API_KEY = os.getenv("BYBIT_API_KEY")
-BYBIT_API_SECRET = os.getenv("BYBIT_API_SECRET")
 YOOMONEY_WALLET = os.getenv("YOOMONEY_WALLET", "")
 
 # Платёжные реквизиты
@@ -110,7 +107,6 @@ class TimedDict(dict):
 
 
 ORDER_USER_MAP = TimedDict(max_age_seconds=86400)  # 24 часа
-PAYMENT_MAP = TimedDict(max_age_seconds=3600)  # 1 час
 ORDER_INFO_MAP = TimedDict(max_age_seconds=604800)  # 7 дней
 ORDER_LOCK = {}  # Защита от дублей: {order_number: True}
 _ORDER_COUNTER_LOCK = threading.Lock()  # Защита от race condition в generate_order
@@ -511,9 +507,27 @@ def generate_order():
             return f"ORD-{int(time.time())}"
 
 
-def generate_payment_id():
-    """Генерация уникального ID платежа"""
-    return str(int(time.time() * 1000))
+async def _get_user_orders_msg(telegram_id: int) -> tuple:
+    """Возвращает (ok, msg) с заказами пользователя из SQLite"""
+    orders = db.get_user_orders_by_telegram_id(telegram_id)
+    if not orders:
+        return False, "📋 У вас пока нет заказов."
+    msg = "📋 <b>Ваши заказы:</b>\n\n"
+    for o in orders[:10]:
+        status = o.get('status', '—')
+        tariff = o.get('tariff', '—')
+        rub = o.get('amount_rub', 0)
+        date = str(o.get('created_at', ''))[:16]
+        msg += (
+            f"🔹 <b>{o['order_number']}</b>\n"
+            f"   Тариф: {tariff}\n"
+            f"   Сумма: {fmt(rub)} ₽\n"
+            f"   Статус: {status}\n"
+            f"   Дата: {date}\n\n"
+        )
+    if len(orders) > 10:
+        msg += f"<i>...и ещё {len(orders) - 10} заказ(ов)</i>"
+    return True, msg
 
 
 async def send_review_for_moderation(bot, review_id: int, user_id: int, username: str,
@@ -676,7 +690,6 @@ def cleanup_memory():
     """Очищает память от устаревших данных"""
     try:
         ORDER_USER_MAP.cleanup()
-        PAYMENT_MAP.cleanup()
         ORDER_INFO_MAP.cleanup()
         
         logger.info("Память очищена")
@@ -777,7 +790,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if query.data == "my_orders":
             user_id = query.from_user.id
             ok, msg = await _get_user_orders_msg(user_id)
-            await query.edit_message_text(msg)
+            await query.edit_message_text(msg, parse_mode="HTML")
             logger.info(f"Пользователь {user_id} просмотрел заказы")
             return
         
@@ -1138,16 +1151,6 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "region": order.get("region", "KZ")
                 }
 
-                payment_id = generate_payment_id()
-
-                PAYMENT_MAP[payment_id] = {
-                    "order_number": order_number,
-                    "user_id": user_id,
-                    "sum_rub": order["rub"],
-                    "service": order["service"],
-                    "tariff": order["tariff"]
-                }
-
                 context.user_data["current_order_number"] = order_number
 
                 # === ВЫБОР СПОСОБА ОПЛАТЫ ===
@@ -1473,28 +1476,16 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                               f"Тариф: <b>{order_info['tariff']}</b>\n" \
                               f"Сумма: <b>{order_info['rub']} ₽</b>"
             else:
-                _cm_sheet = get_sheet()
-                if _cm_sheet:
-                    try:
-                        records = _cm_sheet.get_all_records()
-                        user_records = [r for r in records if str(r.get("User_ID", "")) == str(user_id)]
-                        if user_records:
-                            last = user_records[-1]
-                            last_region = last.get('Регион', '')
-                            last_region_display = REGION_DISPLAY.get(last_region, last_region) if last_region else '—'
-                            client_info += f"\n\n<b>📦 Последний заказ:</b>\n" \
-                                          f"Номер: <b>{last.get('Номер ордера', 'N/A')}</b>\n" \
-                                          f"Регион: <b>{last_region_display}</b>\n" \
-                                          f"Тариф: <b>{last.get('Тариф', 'N/A')}</b>\n" \
-                                          f"Сумма: <b>{last.get('Сумма RUB', 'N/A')} ₽</b>\n" \
-                                          f"Статус: <b>{last.get('Статус', 'N/A')}</b>"
-                        else:
-                            client_info += "\n\n📦 Заказов не найдено"
-                    except Exception as e:
-                        logger.warning(f"Ошибка получения заказов из Sheets для contact_manager: {e}")
-                        client_info += "\n\n📦 Не удалось загрузить заказы"
+                user_orders = db.get_user_orders_by_telegram_id(user_id)
+                if user_orders:
+                    last = user_orders[0]  # Уже отсортированы DESC
+                    client_info += f"\n\n<b>📦 Последний заказ:</b>\n" \
+                                  f"Номер: <b>{last.get('order_number', 'N/A')}</b>\n" \
+                                  f"Тариф: <b>{last.get('tariff', 'N/A')}</b>\n" \
+                                  f"Сумма: <b>{last.get('amount_rub', 'N/A')} ₽</b>\n" \
+                                  f"Статус: <b>{last.get('status', 'N/A')}</b>"
                 else:
-                    client_info += "\n\n📦 Не удалось загрузить заказы"
+                    client_info += "\n\n📦 Заказов не найдено"
 
             try:
                 await context.bot.send_message(
@@ -1551,19 +1542,9 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if query.from_user.id != ADMIN_ID:
                 await query.answer("❌ У вас нет доступа", show_alert=True)
                 return
-            try:
-                current_sheet = get_sheet()
-                if not current_sheet:
-                    await query.edit_message_text("⚠️ Ошибка доступа к таблице.")
-                    return
-                
-                values = current_sheet.get_all_values()
-            except Exception as e:
-                logger.error(f"Ошибка получения заказов: {e}")
-                await query.edit_message_text("⚠️ Ошибка доступа к таблице.")
-                return
-            
-            if len(values) <= 1:
+
+            orders = db.get_recent_orders(10)
+            if not orders:
                 await query.edit_message_text(
                     "📦 Нет заказов пока.",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="back_to_admin")]])
@@ -1571,23 +1552,22 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             msg = "📦 Последние заказы (последние 10):\n\n"
-            for row in reversed(values[1:][-10:]):
-                if len(row) >= 9:
-                    order_num = row[0]
-                    user_id = row[1]
-                    region = row[3]
-                    tariff = row[4]
-                    rub_amt = row[5]
-                    status = row[8]
-                    region_display = REGION_DISPLAY.get(region, region)
-                    
-                    msg += f"🔹 <b>{order_num}</b>\n"
-                    msg += f"   Статус: {status}\n"
-                    msg += f"   Регион: {region_display}\n"
-                    msg += f"   Тариф: {tariff}\n"
-                    msg += f"   Сумма: {rub_amt} ₽\n"
-                    msg += f"   ID: <code>{user_id}</code>\n\n"
-            
+            for o in orders:
+                region_display = REGION_DISPLAY.get(o.get('service', '').split('(')[-1].rstrip(')'), '—')
+                # Пробуем извлечь регион из ORDER_INFO_MAP или service
+                order_info_cached = ORDER_INFO_MAP.get(o['order_number'], {})
+                region_code = order_info_cached.get('region', '')
+                if region_code:
+                    region_display = REGION_DISPLAY.get(region_code, region_code)
+                else:
+                    region_display = o.get('service', '—')
+                msg += f"🔹 <b>{o['order_number']}</b>\n"
+                msg += f"   Статус: {o.get('status', '—')}\n"
+                msg += f"   Сервис: {region_display}\n"
+                msg += f"   Тариф: {o.get('tariff', '—')}\n"
+                msg += f"   Сумма: {o.get('amount_rub', 0)} ₽\n"
+                msg += f"   ID: <code>{o.get('telegram_id', '—')}</code>\n\n"
+
             keyboard = [[InlineKeyboardButton("⬅️ Назад", callback_data="back_to_admin")]]
             await query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
@@ -1596,76 +1576,27 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if query.from_user.id != ADMIN_ID:
                 return
             try:
-                current_sheet = get_sheet()
-                if not current_sheet:
-                    await query.edit_message_text("⚠️ Ошибка доступа к таблице.")
+                stats = db.get_admin_stats()
+                if not stats:
+                    await query.edit_message_text("⚠️ Ошибка получения статистики.")
                     return
-                
-                records = current_sheet.get_all_records()
-                
-                total_orders = len(records)
-                unique_users = len(set(str(r.get("User_ID", "")) for r in records if r.get("User_ID")))
-                
-                # По статусам
-                statuses = {}
-                for r in records:
-                    status = r.get("Статус", "Неизвестен")
-                    statuses[status] = statuses.get(status, 0) + 1
-                
-                # По регионам
-                regions = {}
-                for r in records:
-                    reg = r.get("Регион", "—")
-                    if not reg:
-                        reg = "—"
-                    regions[reg] = regions.get(reg, 0) + 1
-                
-                # Выручка (только выполненные)
-                revenue = sum(int(r.get("Сумма RUB", 0) or 0) for r in records if r.get("Статус") == "Выполнен")
-                
-                # Выручка по регионам (выполненные)
-                region_revenue = {}
-                for r in records:
-                    if r.get("Статус") == "Выполнен":
-                        reg = r.get("Регион", "—") or "—"
-                        rub_val = int(r.get("Сумма RUB", 0) or 0)
-                        region_revenue[reg] = region_revenue.get(reg, 0) + rub_val
-                
-                # Средний чек
-                completed = [r for r in records if r.get("Статус") == "Выполнен"]
-                avg_check = int(revenue / len(completed)) if completed else 0
-                
-                # Конверсия
-                paid_count = statuses.get("Оплачен", 0) + statuses.get("Выполнен", 0)  
-                conversion = int(paid_count / total_orders * 100) if total_orders > 0 else 0
-                
+
                 msg = (
                     "📊 <b>ОБЩАЯ СТАТИСТИКА</b>\n\n"
-                    f"👥 Уникальных клиентов: <b>{unique_users}</b>\n"
-                    f"📦 Всего заказов: <b>{total_orders}</b>\n\n"
+                    f"👥 Уникальных клиентов: <b>{stats.get('unique_users', 0)}</b>\n"
+                    f"📦 Всего заказов: <b>{stats.get('total_orders', 0)}</b>\n\n"
                     f"<b>📈 ПО СТАТУСАМ:</b>\n"
                 )
-                for status, count in statuses.items():
+                for status, count in stats.get('statuses', {}).items():
                     msg += f"• {status}: <b>{count}</b>\n"
-                
-                msg += f"\n<b>🌍 ПО РЕГИОНАМ:</b>\n"
-                for reg, count in regions.items():
-                    reg_name = REGION_DISPLAY.get(reg, reg)
-                    msg += f"• {reg_name}: <b>{count}</b>\n"
-                
+
                 msg += (
                     f"\n<b>💰 ФИНАНСЫ:</b>\n"
-                    f"• Выручка: <b>{fmt(revenue)} ₽</b>\n"
-                    f"• Средний чек: <b>{fmt(avg_check)} ₽</b>\n"
-                    f"• Конверсия: <b>{conversion}%</b>\n"
+                    f"• Выручка: <b>{fmt(stats.get('revenue', 0))} ₽</b>\n"
+                    f"• Средний чек: <b>{fmt(stats.get('avg_check', 0))} ₽</b>\n"
+                    f"• Конверсия: <b>{stats.get('conversion', 0)}%</b>\n"
                 )
-                
-                if region_revenue:
-                    msg += f"\n<b>💰 ВЫРУЧКА ПО РЕГИОНАМ:</b>\n"
-                    for reg, rev in region_revenue.items():
-                        reg_name = REGION_DISPLAY.get(reg, reg)
-                        msg += f"• {reg_name}: <b>{fmt(rev)} ₽</b>\n"
-                
+
                 await query.edit_message_text(
                     msg,
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="back_to_admin")]]),
@@ -1680,48 +1611,25 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if query.from_user.id != ADMIN_ID:
                 await query.answer("❌ У вас нет доступа", show_alert=True)
                 return
-            try:
-                current_sheet = get_sheet()
-                if not current_sheet:
-                    await query.edit_message_text("⚠️ Ошибка доступа к таблице.")
-                    return
-                
-                values = current_sheet.get_all_values()
-            except Exception as e:
-                logger.error(f"Ошибка получения заказов: {e}")
-                await query.edit_message_text("⚠️ Ошибка доступа к таблице.")
-                return
-            
-            if len(values) <= 1:
+
+            orders = db.get_active_orders(20)
+            if not orders:
                 await query.edit_message_text(
-                    "📦 Нет заказов.",
+                    "📦 Нет активных заказов для изменения статуса.",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="back_to_admin")]])
                 )
                 return
 
             msg = "🔄 Выберите заказ для изменения статуса:\n\n"
             keyboard = []
-            for row in reversed(values[1:][-20:]):
-                if len(row) >= 9:
-                    order_num = row[0]
-                    region = row[3]
-                    tariff = row[4]
-                    rub_amt = row[5]
-                    status = row[8]
-                    region_display = REGION_DISPLAY.get(region, region)
-                    # Скрываем выполненные и отменённые заказы
-                    if status in ["Выполнен", "Отменён"]:
-                        continue
-                    msg += f"🔹 <b>{order_num}</b> — {region_display} ({rub_amt} ₽) — {status}\n"
-                    keyboard.append([InlineKeyboardButton(f"📝 {order_num}", callback_data=f"admin_select_order_{order_num}")])
-            
-            if not keyboard:
-                await query.edit_message_text(
-                    "📦 Нет активных заказов для изменения статуса.",
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="back_to_admin")]])
-                )
-                return
-            
+            for o in orders:
+                order_num = o['order_number']
+                rub_amt = o.get('amount_rub', 0)
+                status = o.get('status', '—')
+                tariff = o.get('tariff', '—')
+                msg += f"🔹 <b>{order_num}</b> — {tariff} ({rub_amt} ₽) — {status}\n"
+                keyboard.append([InlineKeyboardButton(f"📝 {order_num}", callback_data=f"admin_select_order_{order_num}")])
+
             keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data="back_to_admin")])
             await query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
@@ -1732,24 +1640,16 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             order_num = query.data.replace("admin_select_order_", "")
             
-            # Получаем информацию о заказе из таблицы
+            # Получаем информацию о заказе из SQLite
             order_info = ""
-            try:
-                current_sheet = get_sheet()
-                if current_sheet:
-                    values = current_sheet.get_all_values()
-                    for row in values[1:]:
-                        if len(row) >= 9 and row[0] == order_num:
-                            region = row[3]
-                            tariff = row[4]
-                            amount_rub = row[5]
-                            region_display = REGION_DISPLAY.get(region, region)
-                            order_info = f"📦 Заказ: <b>{order_num}</b>\n🌍 Регион: {region_display}\n📋 Тариф: {tariff}\n💰 Сумма: {amount_rub} ₽\n\n"
-                            break
-            except Exception as e:
-                logger.error(f"Ошибка получения информации о заказе: {e}")
-            
-            if not order_info:
+            order_db = db.get_order(order_num)
+            if order_db:
+                order_info = (
+                    f"📦 Заказ: <b>{order_num}</b>\n"
+                    f"📋 Тариф: {order_db.get('tariff', '—')}\n"
+                    f"💰 Сумма: {order_db.get('amount_rub', 0)} ₽\n\n"
+                )
+            else:
                 order_info = f"📦 Заказ: <b>{order_num}</b>\n\n"
             
             keyboard = [
@@ -1780,33 +1680,38 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             success = update_order_status(order_num, status_name)
             
             if success:
-                # Получаем user_id из таблицы (ORDER_USER_MAP может быть пустым после перезапуска)
+                # Получаем user_id из памяти или SQLite
                 user_id = ORDER_USER_MAP.get(order_num)
+                order_region = ""
                 if not user_id:
-                    try:
-                        current_sheet = get_sheet()
-                        if current_sheet:
-                            values = current_sheet.get_all_values()
-                            for row in values[1:]:
-                                if len(row) >= 2 and row[0] == order_num:
-                                    user_id = int(row[1])
-                                    break
-                    except Exception as e:
-                        logger.error(f"Ошибка получения user_id из таблицы: {e}")
-                
-                if user_id:
-                    # Определяем тип заказа по региону (KZ или Gift Card)
-                    order_region = ""
-                    try:
-                        _sheet = get_sheet()
-                        if _sheet:
-                            _values = _sheet.get_all_values()
-                            for _row in _values[1:]:
-                                if len(_row) >= 4 and _row[0] == order_num:
-                                    order_region = _row[3]  # столбец "Регион"
-                                    break
-                    except Exception as e:
-                        logger.error(f"Ошибка определения региона заказа: {e}")
+                    order_db_info = db.get_order(order_num)
+                    if order_db_info:
+                        # user_id в orders — internal id, нужен telegram_id
+                        user_obj = db.get_user(order_db_info['user_id']) if order_db_info.get('user_id') else None
+                        # get_user принимает telegram_id, но нам нужен обратный путь
+                        # Используем прямой SQL запрос через get_recent_orders или ORDER_INFO_MAP
+                        pass
+                    # Пробуем ORDER_INFO_MAP
+                    info = ORDER_INFO_MAP.get(order_num, {})
+                    if info:
+                        user_id = info.get('user_id')
+                        order_region = info.get('region', '')
+                    else:
+                        # Фоллбэк: ищем telegram_id через Google Sheets
+                        try:
+                            current_sheet = get_sheet()
+                            if current_sheet:
+                                cell = current_sheet.find(order_num)
+                                if cell:
+                                    row_vals = current_sheet.row_values(cell.row)
+                                    if len(row_vals) >= 4:
+                                        user_id = int(row_vals[1])
+                                        order_region = row_vals[3]
+                        except Exception as e:
+                            logger.error(f"Ошибка получения user_id: {e}")
+                else:
+                    info = ORDER_INFO_MAP.get(order_num, {})
+                    order_region = info.get('region', '')
 
                     is_gift_card = order_region in ("TR", "US", "AE", "SA")
 
@@ -2207,21 +2112,12 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 # Получаем информацию о заказе для админа
                 order_details = ""
-                try:
-                    _sheet = get_sheet()
-                    if _sheet:
-                        _values = _sheet.get_all_values()
-                        for _row in _values[1:]:
-                            if len(_row) >= 7 and _row[0] == order_number:
-                                region_display = REGION_DISPLAY.get(_row[3], _row[3])
-                                order_details = (
-                                    f"🌍 Регион: {region_display}\n"
-                                    f"📋 Тариф: {_row[4]}\n"
-                                    f"💰 Сумма: {_row[5]} ₽\n\n"
-                                )
-                                break
-                except Exception as e:
-                    logger.error(f"Ошибка получения деталей заказа: {e}")
+                order_db_data = db.get_order(order_number)
+                if order_db_data:
+                    order_details = (
+                        f"📋 Тариф: {order_db_data.get('tariff', '—')}\n"
+                        f"💰 Сумма: {order_db_data.get('amount_rub', 0)} ₽\n\n"
+                    )
 
                 # Уведомляем админа с кнопками
                 try:
@@ -2303,7 +2199,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if text == "📋 Заказы":
             ok, msg = await _get_user_orders_msg(user_id)
-            await update.message.reply_text(msg)
+            await update.message.reply_text(msg, parse_mode="HTML")
             logger.info(f"Пользователь {user_id} просмотрел заказы")
             return
 
@@ -2394,7 +2290,6 @@ if __name__ == "__main__":
     import signal
 
     app = ApplicationBuilder().token(TOKEN).build()
-    _bot_app = app
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin))
