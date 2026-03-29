@@ -118,7 +118,7 @@ REGION_DISPLAY = {
 
 REGION_COMMISSION = {
     "KZ": 1.15,
-    "TR": 1.10,
+    "TR": 1.12,
     "US": 1.15,
     "AE": 1.15,
     "SA": 1.15,

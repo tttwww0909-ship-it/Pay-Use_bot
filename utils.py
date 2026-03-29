@@ -166,7 +166,7 @@ def get_usdt_rate():
             return price
     except Exception as e:
         logger.warning(f"Ошибка получения курса USDT: {e}")
-    return 95.0
+    return None
 
 
 def generate_order():

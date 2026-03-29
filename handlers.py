@@ -359,6 +359,9 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             usdt_rate = await asyncio.to_thread(get_usdt_rate)
+            if not usdt_rate:
+                await query.edit_message_text("⚠️ Курс валют временно недоступен. Попробуйте через несколько минут.")
+                return
             commission = REGION_COMMISSION.get(region_code, 1.15)
             commission_pct = round((commission - 1) * 100)
             rub = int(t_usdt * usdt_rate * commission)
@@ -396,7 +399,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         elif query.data == "apple_custom":
             context.user_data["awaiting_apple"] = True
-            await query.edit_message_text("Введите сумму пополнения Apple ID (2 000–45 000 KZT)")
+            await query.edit_message_text("Введите сумму пополнения Apple ID (5 000–45 000 KZT)")
 
         # === ВЫБОР ТАРИФА APPLE ID (KZ) ===
         elif query.data.startswith("apple_") and query.data in PRICES:
@@ -484,7 +487,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 mark_order_created(user_id)
 
                 usdt_rate = await asyncio.to_thread(get_usdt_rate)
-                amount_usdt = round(order["rub"] / usdt_rate, 2)
+                amount_usdt = round(order["rub"] / usdt_rate, 2) if usdt_rate else None
                 context.user_data["amount_usdt"] = amount_usdt
 
                 ORDER_INFO_MAP[order_number] = {
@@ -495,7 +498,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "tariff": order["tariff"],
                     "kzt": order["kzt"],
                     "rub": order["rub"],
-                    "usdt": amount_usdt,
+                    "usdt": amount_usdt or 0,
                     "region": order.get("region", "KZ")
                 }
                 context.user_data["current_order_number"] = order_number
@@ -513,11 +516,12 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         [InlineKeyboardButton("❓ FAQ", callback_data="help_payment")]
                     ]
 
+                usdt_suffix = f" (~{amount_usdt} USDT)" if amount_usdt else ""
                 await query.edit_message_text(
                     f"✅ Заявка сформирована!\n\n"
                     f"Номер заказа: <b>{order['number']}</b>\n"
                     f"Тариф: <b>{order['tariff']}</b>\n"
-                    f"Сумма: <b>{fmt(order['rub'])} ₽</b> (~{amount_usdt} USDT)\n\n"
+                    f"Сумма: <b>{fmt(order['rub'])} ₽</b>{usdt_suffix}\n\n"
                     f"Выберите способ оплаты:",
                     reply_markup=InlineKeyboardMarkup(pay_buttons),
                     parse_mode="HTML"
@@ -714,11 +718,12 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         [InlineKeyboardButton("💎 Криптой (USDT)", callback_data=f"pay_crypto_{order_number}")],
                         [InlineKeyboardButton("❓ FAQ", callback_data="help_payment")]
                     ]
+                usdt_suffix = f" (~{amount_usdt} USDT)" if amount_usdt else ""
                 await query.edit_message_text(
                     f"✅ Заявка сформирована!\n\n"
                     f"Номер заказа: <b>{order_number}</b>\n"
                     f"Тариф: <b>{order['tariff']}</b>\n"
-                    f"Сумма: <b>{fmt(order['rub'])} ₽</b> (~{amount_usdt} USDT)\n\n"
+                    f"Сумма: <b>{fmt(order['rub'])} ₽</b>{usdt_suffix}\n\n"
                     f"Выберите способ оплаты:",
                     reply_markup=InlineKeyboardMarkup(pay_buttons),
                     parse_mode="HTML"
@@ -1429,8 +1434,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if context.user_data.get("awaiting_apple", False):
             try:
                 amount = int(text)
-                if not (2000 <= amount <= 45000):
-                    await update.message.reply_text("❌ Неверный диапазон.\n\nВведите сумму от 2 000 до 45 000 KZT:")
+                if not (5000 <= amount <= 45000):
+                    await update.message.reply_text("❌ Неверный диапазон.\n\nВведите сумму от 5 000 до 45 000 KZT:")
                     return
 
                 can_create, spam_msg = check_spam(user_id)
@@ -1477,7 +1482,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.info(f"Пользователь {user_id} создал заказ Apple на {amount} KZT")
                 return
             except ValueError:
-                await update.message.reply_text("❌ Введите только число.\n\nПовторите ввод суммы (2 000–45 000 KZT):")
+                await update.message.reply_text("❌ Введите только число.\n\nПовторите ввод суммы (5 000–45 000 KZT):")
                 return
 
     except Exception as e:

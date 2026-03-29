@@ -1,20 +1,37 @@
-# Popolnyaska Bot — План проекта
+# ПополняшкаBot — План проекта
 
 ## Инфраструктура
 - **Локальная папка:** `C:\Users\maksi\OneDrive\Desktop\popolnyaska_bot\`
 - **Сервер:** см. .env (Hetzner VPS)
 - **Путь на сервере:** `/opt/popolnyaska-bot/`
 - **Systemd сервис:** `popolnyaska-bot.service`
-- **База данных:** SQLite (orders.db) — основной источник данных; Google Sheets — запись + лист Статистика
+- **База данных:** SQLite (orders.db, timeout=5с) — основной источник данных; Google Sheets — запись + лист Статистика
+- **Бэкап SQLite:** cron ежедневно в 03:00, хранит 7 последних (backup.sh)
 - **Деплой:** `ssh <SERVER_IP> "cd /opt/popolnyaska-bot && git pull && systemctl restart popolnyaska-bot"`
+- **CI/CD:** GitHub Actions — pytest на push/PR в main
 - **GitHub:** https://github.com/tttwww0909-ship-it/popolnyaska_bot
 
-## Файлы проекта
-- **bot.py** (~2280 строк) — вся логика бота: хендлеры, заказы, оплата, админка, отзывы
-- **database.py** (~620 строк, 24 метода) — модуль SQLite
-- **requirements.txt** — python-telegram-bot[job-queue]==20.3, gspread, oauth2client, requests, python-dotenv
-- **service_account.json** — ключ Google Sheets
-- **.env** — токен, ADMIN_ID, реквизиты оплаты
+## Структура проекта (модульная архитектура)
+
+```
+popolnyaska_bot/
+├── bot.py              (26 строк)   — точка входа, запуск polling
+├── config.py           (130 строк)  — .env, константы, логирование, тарифы
+├── utils.py            (161 строка) — TimedDict, валидация email, антиспам, курсы, генерация ордера
+├── handlers.py         (1353 строки) — все Telegram-хендлеры (команды, кнопки, админка, отзывы)
+├── sheets.py           (288 строк)  — Google Sheets: запись заказов, обновление статистики (lazy init)
+├── database.py         (405 строк)  — SQLite CRUD, миграции
+├── requirements.txt    — python-telegram-bot[job-queue]==20.3, gspread==6.2.1, oauth2client, requests, python-dotenv, pytest
+├── .env                — токен, ADMIN_ID, реквизиты оплаты
+├── service_account.json — ключ Google Sheets
+├── backup.sh           — скрипт бэкапа SQLite
+├── .github/workflows/ci.yml — GitHub Actions CI
+├── tests/
+│   ├── test_utils.py   — тесты TimedDict, fmt, validate_email, check_spam, generate_order
+│   └── test_database.py — тесты Database CRUD
+├── .gitignore
+└── README.md
+```
 
 ## Столбцы Google Sheets (лист "popolnyaska_bot")
 Номер ордера | User_ID | Username | Регион | Тариф | Сумма RUB | Способ оплаты | Дата | Статус
@@ -41,7 +58,7 @@
 | Управление статусами (админ) | SQLite |
 | Информация о заказе (админ) | SQLite |
 | Contact manager | SQLite |
-| Лист "Статистика" | Sheets get_all_records (фоновый поток) |
+| Лист "Статистика" | Sheets (фоновый поток, gspread retry с backoff) |
 
 ## Реализованный функционал
 
@@ -58,6 +75,7 @@
 - [x] Сохранение заказа в Google Sheets + SQLite
 - [x] Антиспам (60 сек кулдаун, макс 3 заказа за 20 мин)
 - [x] Кнопка "📎 Отправить другой скриншот" для замены скриншота
+- [x] Валидация email (regex) при вводе почты Apple ID
 
 ### ✅ Способы оплаты (порядок: ЮMoney → OZON → Крипто)
 - [x] ЮMoney (перевод на кошелёк)
@@ -97,24 +115,34 @@
 - [x] Корректное завершение (SIGTERM/SIGINT)
 
 ### ✅ Технические оптимизации
+- [x] Модульная архитектура (bot.py → config / utils / handlers / sheets / database)
 - [x] Кэширование Google Sheets (get_sheet() с TTL 5 мин)
 - [x] Кэширование sheets_row в SQLite (без find() при обновлениях)
 - [x] Debounce обновления статистики (не чаще раза в минуту)
 - [x] Обновление статистики в фоновом потоке (threading)
+- [x] gspread retry с экспоненциальным backoff (3 попытки)
+- [x] Lazy init Google Sheets (авторизация при первом обращении, не при импорте)
+- [x] Блокирующий I/O обёрнут в asyncio.to_thread
+- [x] SQLite timeout=5с для защиты от зависания
 - [x] TimedDict — автоудаление устаревших записей из памяти
 - [x] Периодическая очистка памяти (JobQueue, каждый час)
 - [x] Генерация ордера: SQLite единственный источник (без get_all_records)
 - [x] Админка: все чтения через SQLite (без Sheets API)
 - [x] Contact manager: SQLite вместо get_all_records
+- [x] Тесты (pytest): utils, database
+- [x] CI/CD: GitHub Actions на push/PR
 
-### ✅ Проведённый аудит (все этапы завершены)
-- [x] Этап 1: Удаление мёртвого кода (bybit, reviews channel, payment handlers, aiohttp)
-- [x] Этап 2: Исправление багов (.gitignore, AWAITING_SCREENSHOT, ORDER_LOCK, race condition)
-- [x] Этап 3: Технический долг (show_orders хелпер, кэш статистики, очистка памяти)
-- [x] Этап 4: Очистка тестовых данных на сервере
-- [x] Финальный аудит: _get_user_orders_msg, удаление PAYMENT_MAP/json/BYBIT_API_*/\_bot_app, миграция админки на SQLite
+### ✅ Проведённые аудиты
+- [x] Аудит v1: Удаление мёртвого кода (bybit, reviews channel, payment handlers, aiohttp)
+- [x] Аудит v2: Исправление багов (.gitignore, AWAITING_SCREENSHOT, ORDER_LOCK, race condition)
+- [x] Аудит v3: Технический долг (show_orders хелпер, кэш статистики, очистка памяти)
+- [x] Очистка тестовых данных на сервере
+- [x] Финальный аудит: миграция админки на SQLite, удаление PAYMENT_MAP/json/BYBIT_API_*
+- [x] Модульный рефакторинг: разбивка монолита на 6 модулей
+- [x] Хардкод-аудит: .gitignore, email-валидация, type hints, README
 
 ## Возможные улучшения (не реализовано)
+- [ ] Разбить handlers.py на подмодули (admin, order, payment, review)
 - [ ] Добавить больше сервисов (не только Apple ID)
 - [ ] Реферальная система
 - [ ] Автоматическая проверка оплаты
