@@ -2109,16 +2109,20 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             db.update_review_status(review_id, "approved")
             stars = "⭐" * review["rating"]
+            empty_stars = "☆" * (5 - review["rating"])
             username = review.get("username", "Аноним")
             comment = review.get("comment")
-            comment_text = f"\n\n<i>«{comment}»</i>" if comment else ""
+            comment_block = f"\n\n💬 <i>«{comment}»</i>" if comment else ""
             # Публикуем в канал
             try:
                 await context.bot.send_message(
                     REVIEWS_CHANNEL,
-                    f"{stars}\n"
-                    f"<b>@{username}</b> — заказ {review['order_number']}"
-                    f"{comment_text}",
+                    f"┌──────────────────┐\n"
+                    f"       {stars}{empty_stars}\n"
+                    f"└──────────────────┘\n"
+                    f"{comment_block}\n\n"
+                    f"👤 <b>@{username}</b>\n"
+                    f"🍏 Пользовался нашим сервисом",
                     parse_mode="HTML"
                 )
                 await query.edit_message_text(
