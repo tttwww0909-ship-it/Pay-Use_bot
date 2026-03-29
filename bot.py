@@ -2405,7 +2405,10 @@ if __name__ == "__main__":
     app.add_error_handler(error_handler)
 
     # Периодическая очистка памяти — каждый час
-    app.job_queue.run_repeating(periodic_cleanup, interval=3600, first=3600)
+    if app.job_queue:
+        app.job_queue.run_repeating(periodic_cleanup, interval=3600, first=3600)
+    else:
+        logger.warning("⚠️ JobQueue недоступен. Установи: pip install 'python-telegram-bot[job-queue]'")
 
     async def shutdown(sig=None):
         """Корректное завершение работы бота"""
