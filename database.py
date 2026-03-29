@@ -381,7 +381,12 @@ class Database:
                 c.execute("SELECT COUNT(*) FROM orders")
                 total_orders = c.fetchone()[0]
                 c.execute("SELECT status, COUNT(*) FROM orders GROUP BY status")
-                statuses = dict(c.fetchall())
+                raw_statuses = dict(c.fetchall())
+                # Маппинг 'new' → 'Ожидает оплаты' для отображения
+                statuses = {}
+                for k, v in raw_statuses.items():
+                    display_key = 'Ожидает оплаты' if k == 'new' else k
+                    statuses[display_key] = statuses.get(display_key, 0) + v
                 c.execute("SELECT SUM(amount_rub) FROM orders WHERE status = 'Выполнен'")
                 revenue = c.fetchone()[0] or 0
                 c.execute("SELECT COUNT(*) FROM orders WHERE status = 'Выполнен'")

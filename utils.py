@@ -109,6 +109,16 @@ def mark_order_created(user_id: int):
     USER_ORDER_TIMES[user_id].append(now)
 
 
+# === ВАЛИДАЦИЯ ===
+import re
+_EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$')
+
+
+def validate_email(email: str) -> bool:
+    """Проверяет формат email"""
+    return bool(_EMAIL_RE.match(email))
+
+
 # === ФОРМАТИРОВАНИЕ ===
 def fmt(num):
     """Форматирует число с пробелами между тысячами: 25000 → 25 000"""

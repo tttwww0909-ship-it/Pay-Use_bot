@@ -17,7 +17,7 @@ from config import (
 )
 from utils import (
     fmt, get_rate, get_usdt_rate, check_spam, mark_order_created, generate_order,
-    cleanup_memory, ORDER_USER_MAP, ORDER_INFO_MAP, ORDER_LOCK,
+    cleanup_memory, validate_email, ORDER_USER_MAP, ORDER_INFO_MAP, ORDER_LOCK,
     AWAITING_SCREENSHOT, AWAITING_EMAIL, AWAITING_CODE, AWAITING_REVIEW_COMMENT,
 )
 from sheets import add_order_to_sheet, update_payment_method, update_order_status, find_order_user_in_sheets
@@ -357,8 +357,6 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not can_create:
                 await query.answer(spam_msg, show_alert=True)
                 return
-
-            mark_order_created(user.id)
 
             usdt_rate = await asyncio.to_thread(get_usdt_rate)
             commission = REGION_COMMISSION.get(region_code, 1.15)
@@ -1336,7 +1334,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             email = text.lower()
 
-            if "@" in email and "." in email:
+            if validate_email(email):
                 del AWAITING_EMAIL[user_id]
 
                 user = update.message.from_user
