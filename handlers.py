@@ -1360,14 +1360,20 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif query.data.startswith("resend_screenshot_"):
             order_number = query.data.replace("resend_screenshot_", "")
             user_id = query.from_user.id
+            attempts = context.user_data.get("screenshot_attempts", 0)
+            if attempts >= 3:
+                await query.answer("Превышен лимит попыток (3). Обратитесь к оператору.", show_alert=True)
+                return
+            context.user_data["screenshot_attempts"] = attempts + 1
             AWAITING_SCREENSHOT[user_id] = order_number
             await query.edit_message_text(
                 f"📸 <b>Отправьте новый скриншот</b>\n\n"
                 f"Заказ: <b>{order_number}</b>\n\n"
-                f"Отправьте скриншот подтверждения оплаты прямо в этот чат.",
+                f"Отправьте скриншот подтверждения оплаты прямо в этот чат.\n"
+                f"<i>Попытка {attempts + 1} из 3</i>",
                 parse_mode="HTML"
             )
-            logger.info(f"Клиент {user_id} запросил переотправку скриншота для {order_number}")
+            logger.info(f"Клиент {user_id} запросил переотправку скриншота для {order_number} (попытка {attempts + 1}/3)")
 
         # === НАЗАД В АДМИН-ПАНЕЛЬ ===
         elif query.data == "back_to_admin":
@@ -1460,6 +1466,7 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         del AWAITING_SCREENSHOT[user_id]
+        context.user_data["screenshot_attempts"] = 0
 
     except Exception as e:
         logger.error(f"Ошибка в photo_handler: {e}")
