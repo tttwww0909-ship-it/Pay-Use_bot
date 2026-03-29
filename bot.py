@@ -1,8 +1,6 @@
 import requests
 import gspread
 import time
-import hmac
-import hashlib
 import json
 import logging
 import os
@@ -27,7 +25,6 @@ OZON_PAY_URL = os.getenv("OZON_PAY_URL", "")
 BYBIT_UID = os.getenv("BYBIT_UID", "")
 BSC_ADDRESS = os.getenv("BSC_ADDRESS", "")
 TRC20_ADDRESS = os.getenv("TRC20_ADDRESS", "")
-REVIEWS_CHANNEL = os.getenv("REVIEWS_CHANNEL", "@popolnyaskareviews")
 
 # Проверяем, что все переменные загружены
 if not TOKEN:
@@ -63,9 +60,9 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram").setLevel(logging.WARNING)
 logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, LabeledPrice
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.error import BadRequest
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, PreCheckoutQueryHandler, ContextTypes, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 from oauth2client.service_account import ServiceAccountCredentials
 
 
@@ -528,12 +525,6 @@ def generate_payment_id():
     return str(int(time.time() * 1000))
 
 
-def bybit_signature(timestamp, api_key, secret, recv_window, body_str):
-    """Создание подписи для Bybit API"""
-    param_str = f"{timestamp}{api_key}{recv_window}{body_str}"
-    return hmac.new(secret.encode(), param_str.encode(), hashlib.sha256).hexdigest()
-
-
 async def send_review_for_moderation(bot, review_id: int, user_id: int, username: str,
                                       order_num: str, rating: int, comment: str | None):
     """Отправляет отзыв админу для информации"""
@@ -551,64 +542,6 @@ async def send_review_for_moderation(bot, review_id: int, user_id: int, username
         )
     except Exception as e:
         logger.error(f"Ошибка отправки отзыва админу: {e}")
-
-
-def create_bybit_payment(order_number, amount_usdt, service_name, tariff_name):
-    """Создаёт счёт через Bybit Pay API"""
-    try:
-        timestamp = str(int(time.time() * 1000))
-        recv_window = "20000"
-        
-        body = {
-            "accountId": BYBIT_API_KEY,
-            "amount": str(amount_usdt),
-            "currency": "USDT",
-            "orderNo": order_number,
-            "orderDescription": f"{service_name} ({tariff_name})",
-            "callbackUrl": "",  # Будет настроен при деплое на VPS
-            "env": {
-                "terminalType": "APP"
-            }
-        }
-        
-        body_str = json.dumps(body)
-        sign = bybit_signature(timestamp, BYBIT_API_KEY, BYBIT_API_SECRET, recv_window, body_str)
-        
-        headers = {
-            "X-BAPI-API-KEY": BYBIT_API_KEY,
-            "X-BAPI-TIMESTAMP": timestamp,
-            "X-BAPI-RECV-WINDOW": recv_window,
-            "X-BAPI-SIGN": sign,
-            "Content-Type": "application/json"
-        }
-        
-        response = requests.post(
-            "https://api.bybit.com/fiat/otc/pay/order/create",
-            headers=headers,
-            data=body_str,
-            timeout=15
-        )
-        
-        logger.info(f"Bybit Pay ответ: HTTP {response.status_code}, Body: {response.text[:500]}")
-        
-        if not response.text:
-            logger.error(f"❌ Bybit Pay: пустой ответ (HTTP {response.status_code})")
-            return None
-        
-        data = response.json()
-        
-        if data.get("ret_code") == 0 or data.get("retCode") == 0:
-            result = data.get("result", {})
-            payment_url = result.get("payUrl") or result.get("pay_url", "")
-            logger.info(f"✅ Bybit Pay счёт создан для {order_number}: {payment_url}")
-            return payment_url
-        else:
-            logger.error(f"❌ Ошибка Bybit Pay: {data}")
-            return None
-            
-    except Exception as e:
-        logger.error(f"❌ Ошибка создания Bybit Pay счёта: {e}")
-        return None
 
 
 def get_usdt_rate():
@@ -894,10 +827,6 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Выбери действие или используй кнопки внизу:",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
-            return
-
-        # === ОТЗЫВЫ (редирект убран) ===
-        if query.data == "reviews":
             return
 
         # === FAQ МЕНЮ ===
@@ -2518,62 +2447,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Произошла ошибка. Попробуйте позже.")
 
 
-async def pre_checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Подтверждение pre-checkout запроса от Telegram"""
-    query = update.pre_checkout_query
-    try:
-        await query.answer(ok=True)
-        logger.info(f"Pre-checkout подтверждён для заказа {query.invoice_payload}")
-    except Exception as e:
-        logger.error(f"Ошибка pre-checkout: {e}")
-        await query.answer(ok=False, error_message="Ошибка обработки платежа. Попробуйте позже.")
-
-
-async def successful_payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка успешной оплаты"""
-    try:
-        payment = update.message.successful_payment
-        order_number = payment.invoice_payload
-        user_id = update.message.from_user.id
-        total_amount = payment.total_amount / 100  # копейки → рубли
-
-        # Обновляем статус заказа
-        update_order_status(order_number, ORDER_STATUSES["paid"])
-
-        # Уведомляем клиента
-        await update.message.reply_text(
-            f"✅ Оплата прошла успешно!\n\n"
-            f"Номер заказа: <b>{order_number}</b>\n"
-            f"Сумма: <b>{int(total_amount)} ₽</b>\n\n"
-            f"Менеджер свяжется с вами в течение 30 минут для предоставления доступа.",
-            parse_mode="HTML"
-        )
-
-        # Уведомляем админа
-        user = update.message.from_user
-        username_display = f'<a href="https://t.me/{user.username}">@{user.username}</a>' if user.username else 'Нет'
-        try:
-            await context.bot.send_message(
-                ADMIN_ID,
-                f"💰 Получена оплата!\n\n"
-                f"<b>📦 Заказ:</b> {order_number}\n"
-                f"<b>💵 Сумма:</b> {int(total_amount)} ₽\n\n"
-                f"<b>👤 Клиент:</b>\n"
-                f'Имя: <a href="tg://user?id={user_id}">{user.first_name or "Клиент"}</a>\n'
-                f"Ник: {username_display}\n"
-                f"ID: <code>{user_id}</code>\n\n"
-                f"⚡ Статус автоматически изменён на <b>Оплачен</b>",
-                parse_mode="HTML"
-            )
-        except Exception as e:
-            logger.error(f"Ошибка уведомления админа об оплате: {e}")
-
-        logger.info(f"✅ Оплата получена: {order_number}, {int(total_amount)} ₽, user {user_id}")
-
-    except Exception as e:
-        logger.error(f"Ошибка обработки успешной оплаты: {e}")
-
-
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     """Глобальный обработчик ошибок"""
     logger.error(f"Ошибка при обработке запроса: {context.error}")
@@ -2591,8 +2464,6 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin))
     app.add_handler(CommandHandler("reviews", reviews_command))
-    app.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
-    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
     app.add_handler(CallbackQueryHandler(buttons))
     app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
