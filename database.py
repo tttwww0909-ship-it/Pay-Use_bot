@@ -427,6 +427,23 @@ class Database:
             if conn:
                 conn.close()
 
+    def get_all_reviews(self) -> List[Dict]:
+        """Возвращает все отзывы для админа"""
+        conn = None
+        try:
+            conn = sqlite3.connect(self.db_file)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            c.execute("SELECT * FROM reviews ORDER BY created_at DESC")
+            results = c.fetchall()
+            return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения всех отзывов: {e}")
+            return []
+        finally:
+            if conn:
+                conn.close()
+
     def get_stats(self) -> Dict:
         """Получает статистику"""
         conn = None

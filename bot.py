@@ -791,6 +791,35 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Ошибка в admin: {e}")
 
 
+async def reviews_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает все отзывы — только для админа"""
+    if update.message.from_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ У вас нет доступа.")
+        return
+
+    reviews = db.get_all_reviews()
+    if not reviews:
+        await update.message.reply_text("📭 Отзывов пока нет.")
+        return
+
+    # Разбиваем на части по 10 отзывов чтобы не превысить лимит Telegram
+    chunk_size = 10
+    total = len(reviews)
+    for i in range(0, total, chunk_size):
+        chunk = reviews[i:i + chunk_size]
+        text = f"⭐ <b>Отзывы ({i+1}–{min(i+chunk_size, total)} из {total})</b>\n\n"
+        for r in chunk:
+            stars = "⭐" * r["rating"]
+            comment = f"\n💬 <i>{r['comment']}</i>" if r.get("comment") else ""
+            date = str(r.get("created_at", ""))[:10]
+            text += (
+                f"<b>{r['order_number']}</b> · @{r['username']} · {date}\n"
+                f"{stars}{comment}\n"
+                f"{'─' * 20}\n"
+            )
+        await update.message.reply_text(text, parse_mode="HTML")
+
+
 async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка всех кнопок"""
     query = update.callback_query
@@ -2543,6 +2572,7 @@ if __name__ == "__main__":
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin))
+    app.add_handler(CommandHandler("reviews", reviews_command))
     app.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
     app.add_handler(CallbackQueryHandler(buttons))
