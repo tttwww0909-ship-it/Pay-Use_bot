@@ -116,6 +116,7 @@ ORDER_USER_MAP = TimedDict(max_age_seconds=86400)  # 24 часа
 PAYMENT_MAP = TimedDict(max_age_seconds=3600)  # 1 час
 ORDER_INFO_MAP = TimedDict(max_age_seconds=604800)  # 7 дней
 ORDER_LOCK = {}  # Защита от дублей: {order_number: True}
+_ORDER_COUNTER_LOCK = threading.Lock()  # Защита от race condition в generate_order
 AWAITING_SCREENSHOT = TimedDict(max_age_seconds=86400)  # user_id: order_number
 AWAITING_EMAIL = TimedDict(max_age_seconds=86400)  # user_id: order_number (ожидание почты Apple ID)
 AWAITING_CODE = {}  # admin_id: {"order_num": ..., "client_id": ...} (ожидание ввода кода админом)
@@ -481,44 +482,45 @@ def get_rate():
 
 
 def generate_order():
-    """Генерация номера ордера с обработкой ошибок"""
-    try:
-        max_number = 1000
+    """Генерация номера ордера с обработкой ошибок. Lock защищает от race condition."""
+    with _ORDER_COUNTER_LOCK:
+        try:
+            max_number = 1000
 
-        # Проверяем Google Sheets
-        current_sheet = get_sheet()
-        if current_sheet:
+            # Проверяем Google Sheets
+            current_sheet = get_sheet()
+            if current_sheet:
+                try:
+                    records = current_sheet.get_all_records()
+                    if records:
+                        last = records[-1].get("Номер ордера", "ORD-1000")
+                        try:
+                            max_number = max(max_number, int(last.split("-")[1]))
+                        except (ValueError, IndexError):
+                            pass
+                except Exception as e:
+                    logger.warning(f"Ошибка чтения Sheets для генерации ордера: {e}")
+
+            # Проверяем локальную БД (на случай если в БД номер больше)
             try:
-                records = current_sheet.get_all_records()
-                if records:
-                    last = records[-1].get("Номер ордера", "ORD-1000")
+                conn = sqlite3.connect("orders.db")
+                c = conn.cursor()
+                c.execute("SELECT order_number FROM orders ORDER BY id DESC LIMIT 1")
+                row = c.fetchone()
+                conn.close()
+                if row:
                     try:
-                        max_number = max(max_number, int(last.split("-")[1]))
+                        db_number = int(row[0].split("-")[1])
+                        max_number = max(max_number, db_number)
                     except (ValueError, IndexError):
                         pass
             except Exception as e:
-                logger.warning(f"Ошибка чтения Sheets для генерации ордера: {e}")
+                logger.warning(f"Ошибка чтения БД для генерации ордера: {e}")
 
-        # Проверяем локальную БД (на случай если в БД номер больше)
-        try:
-            conn = sqlite3.connect("orders.db")
-            c = conn.cursor()
-            c.execute("SELECT order_number FROM orders ORDER BY id DESC LIMIT 1")
-            row = c.fetchone()
-            conn.close()
-            if row:
-                try:
-                    db_number = int(row[0].split("-")[1])
-                    max_number = max(max_number, db_number)
-                except (ValueError, IndexError):
-                    pass
+            return f"ORD-{max_number + 1}"
         except Exception as e:
-            logger.warning(f"Ошибка чтения БД для генерации ордера: {e}")
-
-        return f"ORD-{max_number + 1}"
-    except Exception as e:
-        logger.error(f"Ошибка при генерации ордера: {e}")
-        return f"ORD-{int(time.time())}"
+            logger.error(f"Ошибка при генерации ордера: {e}")
+            return f"ORD-{int(time.time())}"
 
 
 def generate_payment_id():
@@ -1200,9 +1202,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.edit_message_text("⏳ Заказ уже обрабатывается. Подождите...")
                 return
             
-            ORDER_LOCK[order_number] = True
-            
             try:
+                ORDER_LOCK[order_number] = True
                 ORDER_USER_MAP[order_number] = user_id
 
                 # === ДОБАВЛЯЕМ В ТАБЛИЦУ ===
@@ -1220,7 +1221,6 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 if not add_order_to_sheet(order_data):
                     await query.edit_message_text("❌ Ошибка сохранения заказа. Попробуйте позже.")
-                    del ORDER_LOCK[order_number]
                     return
                 
                 # Отмечаем создание заказа для антиспама
@@ -2206,8 +2206,8 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML"
         )
         
-        # Убираем из ожидания (можно оставить для повторных скриншотов)
-        # del AWAITING_SCREENSHOT[user_id]
+        # Снимаем ожидание — один скриншот на заказ достаточно
+        del AWAITING_SCREENSHOT[user_id]
         
     except Exception as e:
         logger.error(f"Ошибка в photo_handler: {e}")

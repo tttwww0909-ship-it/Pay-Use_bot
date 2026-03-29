@@ -4,4 +4,5 @@ service_account.json
 __pycache__/
 *.pyc
 .DS_Store
-orders.dbvenv/
+orders.db
+venv/
