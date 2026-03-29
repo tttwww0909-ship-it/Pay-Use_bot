@@ -312,8 +312,13 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("⬅️ Назад", callback_data="apple_topup")]
             ]
             await query.edit_message_text(
-                "🇰🇿 Казахстан — Пополнение Apple ID\n\nВыбери сумму пополнения:",
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                "🇰🇿 Казахстан — Пополнение Apple ID\n\n"
+                "Выбери сумму пополнения:\n\n"
+                "💡 <i>Рекомендуем пополнять на 5–10% больше суммы подписки "
+                "для покрытия возможных налогов App Store "
+                "(зависит от настроек вашего ID).</i>",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode="HTML"
             )
             return
 
@@ -1437,7 +1442,10 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 amount = int(text)
                 if not (5000 <= amount <= 45000):
-                    await update.message.reply_text("❌ Неверный диапазон.\n\nВведите сумму от 5 000 до 45 000 KZT:")
+                    await update.message.reply_text("❌ Неверный диапазон.\n\nВведите сумму от 5 000 до 45 000 KZT (шаг 500):")
+                    return
+                if amount % 500 != 0:
+                    await update.message.reply_text("❌ Сумма должна быть кратна 500 KZT.\n\nНапример: 5 000, 5 500, 6 000 и т.д.")
                     return
 
                 can_create, spam_msg = check_spam(user_id)
