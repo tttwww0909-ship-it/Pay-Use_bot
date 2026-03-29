@@ -2108,21 +2108,32 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.edit_message_text("❌ Отзыв не найден в базе.")
                 return
             db.update_review_status(review_id, "approved")
-            stars = "⭐" * review["rating"]
-            empty_stars = "☆" * (5 - review["rating"])
+            rating = review["rating"]
+            stars = "⭐" * rating
+            empty_stars = "☆" * (5 - rating)
             username = review.get("username", "Аноним")
             comment = review.get("comment")
-            comment_block = f"\n\n💬 <i>«{comment}»</i>" if comment else ""
+
+            NO_COMMENT_PHRASES = {
+                1: "🚢💥 «Корабль ожиданий разбился о скалы реальности»",
+                2: "🚪😶 «Зашёл с надеждой, ушёл с вопросами»",
+                3: "🤷 «Ну... могло быть хуже, могло быть лучше»",
+                4: "🔄👀 «Было хорошо — вернусь проверить»",
+                5: "🏆🔥 «Всё на высшем уровне!»",
+            }
+
+            if comment:
+                quote = f"💬 <i>«{comment}»</i>"
+            else:
+                quote = NO_COMMENT_PHRASES.get(rating, "")
+
             # Публикуем в канал
             try:
                 await context.bot.send_message(
                     REVIEWS_CHANNEL,
-                    f"┌──────────────────┐\n"
-                    f"       {stars}{empty_stars}\n"
-                    f"└──────────────────┘\n"
-                    f"{comment_block}\n\n"
-                    f"👤 <b>@{username}</b>\n"
-                    f"🍏 Пользовался нашим сервисом",
+                    f"{stars}{empty_stars}\n\n"
+                    f"{quote}\n\n"
+                    f"— <b>@{username}</b>",
                     parse_mode="HTML"
                 )
                 await query.edit_message_text(
