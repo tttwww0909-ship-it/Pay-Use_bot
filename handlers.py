@@ -314,9 +314,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
                 "🇰🇿 Казахстан — Пополнение Apple ID\n\n"
                 "Выбери сумму пополнения:\n\n"
-                "💡 <i>Рекомендуем пополнять на 5–10% больше суммы подписки "
-                "для покрытия возможных налогов App Store "
-                "(зависит от настроек вашего ID).</i>",
+                "⚠️ <b>Важно:</b> <i>App Store в Казахстане начисляет НДС (12%) сверх цены подписки. "
+                "Если пополнить ровно на стоимость подписки — после списания налога баланс уйдёт в минус и платёж не пройдёт.</i>",
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode="HTML"
             )
