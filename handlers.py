@@ -281,6 +281,37 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+        if query.data == "faq_usdt_guide":
+            await query.edit_message_text(
+                "💳 <b>Как оплатить через Telegram Wallet (за 2 минуты)</b>\n\n"
+                "Оплата заказов от 8 500 ₽ производится в USDT. Это безопасный способ "
+                "оплаты картой любого банка через внутренний сервис Telegram.\n\n"
+                "➕ <b>Шаг 1. Откройте кошелёк</b>\n"
+                "1. В поиске Telegram найдите @wallet\n"
+                "2. Нажмите «Начать» / «Открыть кошелёк»\n\n"
+                "➕ <b>Шаг 2. Покупка USDT (P2P Маркет)</b>\n"
+                "<i>Это покупка крипты у другого человека переводом по карте, под защитой Telegram.</i>\n"
+                "1. В меню кошелька → «P2P Маркет» → «Купить»\n"
+                "2. Выберите <b>USDT</b>, введите сумму заказа в рублях\n"
+                "3. Выберите удобный банк (Сбер, Т-Банк и др.)\n"
+                "4. Фильтр: продавец с рейтингом <b>95%+</b> сделок\n"
+                "5. Нажмите «Купить» и подтвердите сделку\n\n"
+                "➕ <b>Шаг 3. Оплата продавцу</b>\n"
+                "1. Telegram покажет реквизиты карты продавца\n"
+                "2. Перейдите в приложение банка и переведите точную сумму\n"
+                "3. Вернитесь в Telegram и нажмите «Подтвердить оплату»\n"
+                "4. Через 1–3 минуты USDT зачислятся на ваш баланс\n\n"
+                "➕ <b>Шаг 4. Перевод оплаты нам</b>\n"
+                "1. В @wallet → «Отправить» → «Внешний кошелёк»\n"
+                f"2. Сеть: <b>TRON (TRC-20)</b> — комиссия ~1 USDT\n"
+                f"3. Адрес: <code>{TRC20_ADDRESS}</code>\n"
+                "4. Введите сумму USDT из вашего чека и подтвердите отправку\n\n"
+                "✅ <b>Готово!</b> Сделайте скриншот подтверждения и отправьте его в этот чат — оператор выдаст заказ мгновенно.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к FAQ", callback_data="back_to_faq")]]),
+                parse_mode="HTML"
+            )
+            return
+
         if query.data == "faq_guide":
             await query.edit_message_text(
                 "💡 Не знаете, сколько купить? Мы подскажем!\n\n"
@@ -559,7 +590,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"<i>Нет криптокошелька? Оператор поможет за 2 минуты.</i>",
                         reply_markup=InlineKeyboardMarkup([
                             [InlineKeyboardButton(f"💎 Оплатить криптой (−2%)", callback_data=f"vip_crypto_{order_number}")],
-                            [InlineKeyboardButton("💬 Связаться с оператором", url="https://t.me/popolnyaska_halper")],
+                            [InlineKeyboardButton("� Как купить USDT за 2 мин?", callback_data="faq_usdt_guide")],
+                            [InlineKeyboardButton("�💬 Связаться с оператором", url="https://t.me/popolnyaska_halper")],
                         ]),
                         parse_mode="HTML"
                     )

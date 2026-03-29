@@ -201,5 +201,6 @@ FAQ_KEYBOARD = [
     [InlineKeyboardButton("🔹 Какая комиссия?", callback_data="faq_commission")],
     [InlineKeyboardButton("🔹 Что делать при проблемах?", callback_data="faq_problems")],
     [InlineKeyboardButton("🔹 Безопасно ли это?", callback_data="faq_safety")],
-    [InlineKeyboardButton("💡 Как выбрать номинал?", callback_data="faq_guide")]
+    [InlineKeyboardButton("💡 Как выбрать номинал?", callback_data="faq_guide")],
+    [InlineKeyboardButton("💳 Как оплатить через Telegram Wallet?", callback_data="faq_usdt_guide")]
 ]
