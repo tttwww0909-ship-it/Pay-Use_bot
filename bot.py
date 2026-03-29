@@ -949,7 +949,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Напишите нам — кнопка «Написать менеджеру» доступна в заказе, "
                 "или свяжитесь напрямую с поддержкой.\n\n"
                 "📧 Для жалоб, предложений, сотрудничества и запросов в службу поддержки:\n"
-                "<code>popolnyaskaservice@icloud.com</code>",
+                "<code>popolnyaskaservice@icloud.com</code>\n\n"
+                "⏳ Срок ожидания ответа на эл. почту — до 15 дней.",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("📞 Написать в поддержку", url="https://t.me/popolnyaska_halper")],
                     [InlineKeyboardButton("⬅️ Назад к FAQ", callback_data="back_to_faq")]
@@ -1291,6 +1292,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="HTML"
             )
             update_payment_method(order_number, "ЮMoney")
+            if order_number in ORDER_INFO_MAP:
+                ORDER_INFO_MAP[order_number]['payment_method'] = 'ЮMoney'
             logger.info(f"Клиент {query.from_user.id} выбрал ЮMoney для {order_number}")
 
         # === ОПЛАТА ЧЕРЕЗ OZON БАНК ===
@@ -1323,6 +1326,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="HTML"
             )
             update_payment_method(order_number, "OZON банк")
+            if order_number in ORDER_INFO_MAP:
+                ORDER_INFO_MAP[order_number]['payment_method'] = 'OZON банк'
             logger.info(f"Клиент {query.from_user.id} выбрал OZON банк для {order_number}")
 
         # === ОПЛАТА КРИПТОЙ ===
@@ -1358,6 +1363,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="HTML"
             )
             update_payment_method(order_number, "Crypto")
+            if order_number in ORDER_INFO_MAP:
+                ORDER_INFO_MAP[order_number]['payment_method'] = 'Crypto'
             logger.info(f"Клиент {query.from_user.id} выбрал крипто-оплату для {order_number}")
 
         # === ПОДТВЕРЖДЕНИЕ КРИПТО-ОПЛАТЫ ===
@@ -2139,10 +2146,11 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Получаем информацию о заказе
         order_info = ORDER_INFO_MAP.get(order_number, {})
-        amount_usdt = order_info.get('usdt')
         sum_line = f"{fmt(order_info.get('rub', 0))} ₽"
-        if amount_usdt:
-            sum_line += f" ({amount_usdt} USDT)"
+        if order_info.get('payment_method') == 'Crypto':
+            amount_usdt = order_info.get('usdt')
+            if amount_usdt:
+                sum_line += f" ({amount_usdt} USDT)"
         
         # Пересылаем фото админу с информацией о заказе
         try:
