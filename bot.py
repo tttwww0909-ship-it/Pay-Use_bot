@@ -118,6 +118,7 @@ ORDER_LOCK = {}  # Защита от дублей: {order_number: True}
 AWAITING_SCREENSHOT = TimedDict(max_age_seconds=86400)  # user_id: order_number
 AWAITING_EMAIL = TimedDict(max_age_seconds=86400)  # user_id: order_number (ожидание почты Apple ID)
 AWAITING_CODE = {}  # admin_id: {"order_num": ..., "client_id": ...} (ожидание ввода кода админом)
+AWAITING_REVIEW_COMMENT = {}  # user_id: {"order_num": ..., "rating": ...} (ожидание комментария к отзыву)
 
 # === АНТИСПАМ ===
 USER_ORDER_TIMES = {}  # user_id: [timestamp1, timestamp2, ...] — время создания заказов
@@ -848,26 +849,25 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # === ОТЗЫВЫ ===
         if query.data == "reviews":
+            recent_reviews = db.get_recent_reviews(limit=5)
+            if recent_reviews:
+                reviews_text = ""
+                for r in recent_reviews:
+                    stars = "⭐" * r["rating"]
+                    comment_line = f"\n<i>\"{r['comment']}\"</i>\n" if r.get("comment") else "\n"
+                    reviews_text += f"{stars}{comment_line}— {r['username']}\n\n"
+            else:
+                reviews_text = "<i>Отзывов пока нет. Будьте первым!</i>\n\n"
             keyboard = [
-                [InlineKeyboardButton("📢 Отзывы в канале", url="https://t.me/popolnyaskaservice")],
-                [InlineKeyboardButton("✍️ Оставить отзыв", url="https://t.me/poplnyaska_halper")],
+                [InlineKeyboardButton("📢 Наш канал", url="https://t.me/popolnyaskaservice")],
                 [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_start")]
             ]
             await query.edit_message_text(
                 "⭐ <b>Отзывы наших клиентов</b>\n\n"
                 "━━━━━━━━━━━━━━━━━━\n\n"
-                "⭐⭐⭐⭐⭐\n"
-                "<i>\"Пополнил Apple ID за 15 минут, всё чётко! Рекомендую\"</i>\n"
-                "— Клиент из Казахстана\n\n"
-                "⭐⭐⭐⭐⭐\n"
-                "<i>\"Заказал Gift Card США, код пришёл быстро. Сервис огонь 🔥\"</i>\n"
-                "— Клиент из России\n\n"
-                "⭐⭐⭐⭐⭐\n"
-                "<i>\"Второй раз пользуюсь, всё работает без проблем\"</i>\n"
-                "— Постоянный клиент\n\n"
+                f"{reviews_text}"
                 "━━━━━━━━━━━━━━━━━━\n\n"
-                "📢 Больше отзывов — в нашем канале\n"
-                "✍️ Хотите оставить отзыв? Напишите менеджеру!",
+                "💬 Отзыв можно оставить после завершения заказа",
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode="HTML"
             )
@@ -1919,11 +1919,34 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         client_message = status_messages.get(new_status, f"Статус заказа изменён на: {status_name}")
                     
                     try:
-                        await context.bot.send_message(
-                            user_id,
-                            f"📦 <b>Заказ {order_num}</b>\n\n{client_message}",
-                            parse_mode="HTML"
-                        )
+                        if new_status == "completed":
+                            # Предлагаем оценить заказ
+                            rating_keyboard = [
+                                [
+                                    InlineKeyboardButton("⭐", callback_data=f"review_rate_1_{order_num}"),
+                                    InlineKeyboardButton("⭐⭐", callback_data=f"review_rate_2_{order_num}"),
+                                    InlineKeyboardButton("⭐⭐⭐", callback_data=f"review_rate_3_{order_num}"),
+                                    InlineKeyboardButton("⭐⭐⭐⭐", callback_data=f"review_rate_4_{order_num}"),
+                                    InlineKeyboardButton("⭐⭐⭐⭐⭐", callback_data=f"review_rate_5_{order_num}"),
+                                ],
+                                [InlineKeyboardButton("⏭️ Пропустить", callback_data=f"review_skip_{order_num}")]
+                            ]
+                            await context.bot.send_message(
+                                user_id,
+                                f"📦 <b>Заказ {order_num} выполнен!</b>\n\n"
+                                f"✅ Спасибо за покупку!\n\n"
+                                f"⭐ Оцените качество нашего сервиса:",
+                                parse_mode="HTML",
+                                reply_markup=InlineKeyboardMarkup(rating_keyboard)
+                            )
+                        else:
+                            review_markup = None
+                            await context.bot.send_message(
+                                user_id,
+                                f"📦 <b>Заказ {order_num}</b>\n\n{client_message}",
+                                parse_mode="HTML",
+                                reply_markup=review_markup
+                            )
                         logger.info(f"Клиент {user_id} уведомлён о статусе {status_name}")
                     except Exception as e:
                         logger.error(f"Ошибка уведомления клиента о статусе: {e}")
@@ -1984,13 +2007,25 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Уведомляем клиента
             if client_id:
                 try:
+                    rating_keyboard = [
+                        [
+                            InlineKeyboardButton("⭐", callback_data=f"review_rate_1_{order_num}"),
+                            InlineKeyboardButton("⭐⭐", callback_data=f"review_rate_2_{order_num}"),
+                            InlineKeyboardButton("⭐⭐⭐", callback_data=f"review_rate_3_{order_num}"),
+                            InlineKeyboardButton("⭐⭐⭐⭐", callback_data=f"review_rate_4_{order_num}"),
+                            InlineKeyboardButton("⭐⭐⭐⭐⭐", callback_data=f"review_rate_5_{order_num}"),
+                        ],
+                        [InlineKeyboardButton("⏭️ Пропустить", callback_data=f"review_skip_{order_num}")]
+                    ]
                     await context.bot.send_message(
                         client_id,
                         f"🎉 <b>Пополнение выполнено!</b>\n\n"
                         f"📦 Заказ: <b>{order_num}</b>\n\n"
                         f"✅ Ваш Apple ID успешно пополнен!\n"
-                        f"Спасибо, что воспользовались нашим сервисом! 🍏",
-                        parse_mode="HTML"
+                        f"Спасибо, что воспользовались нашим сервисом! 🍏\n\n"
+                        f"⭐ Оцените качество нашего сервиса:",
+                        parse_mode="HTML",
+                        reply_markup=InlineKeyboardMarkup(rating_keyboard)
                     )
                 except Exception as e:
                     logger.error(f"Ошибка уведомления клиента о пополнении: {e}")
@@ -2001,6 +2036,63 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="HTML"
             )
             logger.info(f"Админ отметил пополнение выполненным: {order_num}")
+
+        # === ОБРАБОТКА ОТЗЫВОВ ===
+        elif query.data.startswith("review_rate_"):
+            # review_rate_5_ORD-1001
+            parts = query.data.replace("review_rate_", "").split("_", 1)
+            rating = int(parts[0])
+            order_num = parts[1]
+            user_id = query.from_user.id
+            AWAITING_REVIEW_COMMENT[user_id] = {"order_num": order_num, "rating": rating}
+            stars = "⭐" * rating
+            await query.edit_message_text(
+                f"📦 <b>Заказ {order_num}</b>\n\n"
+                f"Ваша оценка: {stars}\n\n"
+                f"✍️ Напишите комментарий или нажмите «Пропустить»:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⏭️ Пропустить", callback_data=f"review_no_comment_{order_num}_{rating}")]
+                ]),
+                parse_mode="HTML"
+            )
+
+        elif query.data.startswith("review_no_comment_"):
+            # review_no_comment_ORD-1001_5
+            parts = query.data.replace("review_no_comment_", "").rsplit("_", 1)
+            order_num = parts[0]
+            rating = int(parts[1])
+            user_id = query.from_user.id
+            username = query.from_user.username or query.from_user.full_name or "Аноним"
+            if user_id in AWAITING_REVIEW_COMMENT:
+                del AWAITING_REVIEW_COMMENT[user_id]
+            db.add_review(user_id, username, order_num, rating, None)
+            stars = "⭐" * rating
+            try:
+                await context.bot.send_message(
+                    ADMIN_ID,
+                    f"⭐ <b>Новый отзыв!</b>\n\n"
+                    f"📦 Заказ: <b>{order_num}</b>\n"
+                    f"👤 Клиент: @{username} (ID: <code>{user_id}</code>)\n"
+                    f"Оценка: {stars}\n"
+                    f"Комментарий: —",
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"Ошибка уведомления админа об отзыве: {e}")
+            await query.edit_message_text(
+                f"✅ Спасибо за отзыв! {stars}\n\nВаше мнение помогает нам становиться лучше.",
+                parse_mode="HTML"
+            )
+
+        elif query.data.startswith("review_skip_"):
+            order_num = query.data.replace("review_skip_", "")
+            user_id = query.from_user.id
+            if user_id in AWAITING_REVIEW_COMMENT:
+                del AWAITING_REVIEW_COMMENT[user_id]
+            await query.edit_message_text(
+                "✅ Заказ выполнен! Спасибо за покупку.\n\nЕсли возникнут вопросы — мы всегда на связи.",
+                parse_mode="HTML"
+            )
 
         # === НАЗАД В АДМИН-ПАНЕЛЬ ===
         elif query.data == "back_to_admin":
@@ -2205,6 +2297,34 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
+        # === ОЖИДАНИЕ КОММЕНТАРИЯ К ОТЗЫВУ ===
+        if user_id in AWAITING_REVIEW_COMMENT:
+            review_data = AWAITING_REVIEW_COMMENT.get(user_id)
+            order_num = review_data["order_num"]
+            rating = review_data["rating"]
+            comment = text
+            username = update.message.from_user.username or update.message.from_user.full_name or "Аноним"
+            del AWAITING_REVIEW_COMMENT[user_id]
+            db.add_review(user_id, username, order_num, rating, comment)
+            stars = "⭐" * rating
+            try:
+                await context.bot.send_message(
+                    ADMIN_ID,
+                    f"⭐ <b>Новый отзыв!</b>\n\n"
+                    f"📦 Заказ: <b>{order_num}</b>\n"
+                    f"👤 Клиент: @{username} (ID: <code>{user_id}</code>)\n"
+                    f"Оценка: {stars}\n"
+                    f"Комментарий: {comment}",
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"Ошибка уведомления админа об отзыве: {e}")
+            await update.message.reply_text(
+                f"✅ Спасибо за отзыв! {stars}\n\nВаше мнение помогает нам становиться лучше.",
+                parse_mode="HTML"
+            )
+            return
+
         # === ОБРАБОТКА КНОПОК REPLY KEYBOARD ===
         if text == "🍏 Пополнить Apple ID":
             keyboard = [
@@ -2222,25 +2342,24 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         if text == "⭐ Отзывы":
+            recent_reviews = db.get_recent_reviews(limit=5)
+            if recent_reviews:
+                reviews_text = ""
+                for r in recent_reviews:
+                    stars = "⭐" * r["rating"]
+                    comment_line = f"\n<i>\"{r['comment']}\"</i>\n" if r.get("comment") else "\n"
+                    reviews_text += f"{stars}{comment_line}— {r['username']}\n\n"
+            else:
+                reviews_text = "<i>Отзывов пока нет. Будьте первым!</i>\n\n"
             keyboard = [
-                [InlineKeyboardButton("📢 Отзывы в канале", url="https://t.me/popolnyaskaservice")],
-                [InlineKeyboardButton("✍️ Оставить отзыв", url="https://t.me/poplnyaska_halper")]
+                [InlineKeyboardButton("📢 Наш канал", url="https://t.me/popolnyaskaservice")]
             ]
             await update.message.reply_text(
                 "⭐ <b>Отзывы наших клиентов</b>\n\n"
                 "━━━━━━━━━━━━━━━━━━\n\n"
-                "⭐⭐⭐⭐⭐\n"
-                "<i>\"Пополнил Apple ID за 15 минут, всё чётко! Рекомендую\"</i>\n"
-                "— Клиент из Казахстана\n\n"
-                "⭐⭐⭐⭐⭐\n"
-                "<i>\"Заказал Gift Card США, код пришёл быстро. Сервис огонь 🔥\"</i>\n"
-                "— Клиент из России\n\n"
-                "⭐⭐⭐⭐⭐\n"
-                "<i>\"Второй раз пользуюсь, всё работает без проблем\"</i>\n"
-                "— Постоянный клиент\n\n"
+                f"{reviews_text}"
                 "━━━━━━━━━━━━━━━━━━\n\n"
-                "📢 Больше отзывов — в нашем канале\n"
-                "✍️ Хотите оставить отзыв? Напишите менеджеру!",
+                "💬 Отзыв можно оставить после завершения заказа",
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode="HTML"
             )

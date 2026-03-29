@@ -79,6 +79,19 @@ class Database:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+
+            # Таблица отзывов
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS reviews (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    username TEXT,
+                    order_number TEXT,
+                    rating INTEGER NOT NULL,
+                    comment TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
             
             conn.commit()
             logger.info("✅ База данных инициализирована")
@@ -334,6 +347,45 @@ class Database:
             if conn:
                 conn.close()
     
+    def add_review(self, user_id: int, username: str, order_number: str, rating: int, comment: str = None) -> bool:
+        """Добавляет отзыв клиента"""
+        conn = None
+        try:
+            conn = sqlite3.connect(self.db_file)
+            c = conn.cursor()
+            c.execute('''
+                INSERT INTO reviews (user_id, username, order_number, rating, comment)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (user_id, username, order_number, rating, comment))
+            conn.commit()
+            logger.info(f"✅ Отзыв от {user_id} сохранён (рейтинг {rating})")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Ошибка добавления отзыва: {e}")
+            return False
+        finally:
+            if conn:
+                conn.close()
+
+    def get_recent_reviews(self, limit: int = 5) -> List[Dict]:
+        """Возвращает последние отзывы"""
+        conn = None
+        try:
+            conn = sqlite3.connect(self.db_file)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            c.execute('''
+                SELECT * FROM reviews ORDER BY created_at DESC LIMIT ?
+            ''', (limit,))
+            results = c.fetchall()
+            return [dict(row) for row in results]
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения отзывов: {e}")
+            return []
+        finally:
+            if conn:
+                conn.close()
+
     def get_stats(self) -> Dict:
         """Получает статистику"""
         conn = None
