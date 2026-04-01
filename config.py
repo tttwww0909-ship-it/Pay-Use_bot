@@ -18,8 +18,6 @@ YOOMONEY_WALLET = os.getenv("YOOMONEY_WALLET", "")
 # Платёжные реквизиты
 OZON_PAY_URL = os.getenv("OZON_PAY_URL", "")
 BYBIT_UID = os.getenv("BYBIT_UID", "")
-BSC_ADDRESS = os.getenv("BSC_ADDRESS", "")
-TRC20_ADDRESS = os.getenv("TRC20_ADDRESS", "")
 
 # CryptoPay (@CryptoBot) — автоматический приём крипто-платежей
 CRYPTOPAY_TOKEN = os.getenv("CRYPTOPAY_TOKEN", "")
@@ -56,10 +54,6 @@ if not OZON_PAY_URL:
     logger.warning("⚠️ OZON_PAY_URL не установлен в .env")
 if not BYBIT_UID:
     logger.warning("⚠️ BYBIT_UID не установлен в .env")
-if not BSC_ADDRESS:
-    logger.warning("⚠️ BSC_ADDRESS не установлен в .env")
-if not TRC20_ADDRESS:
-    logger.warning("⚠️ TRC20_ADDRESS не установлен в .env")
 if not CRYPTOPAY_TOKEN:
     logger.warning("⚠️ CRYPTOPAY_TOKEN не установлен — автооплата CryptoPay отключена")
 
@@ -208,5 +202,5 @@ FAQ_KEYBOARD = [
     [InlineKeyboardButton("🔹 Что делать при проблемах?", callback_data="faq_problems")],
     [InlineKeyboardButton("🔹 Безопасно ли это?", callback_data="faq_safety")],
     [InlineKeyboardButton("💡 Как выбрать номинал?", callback_data="faq_guide")],
-    [InlineKeyboardButton("💳 Как оплатить через Telegram Wallet?", callback_data="faq_usdt_guide")]
+    [InlineKeyboardButton("💳 Как оплатить криптой (USDT)?", callback_data="faq_usdt_guide")]
 ]

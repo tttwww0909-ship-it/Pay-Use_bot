@@ -13,7 +13,7 @@ from telegram.ext import ContextTypes
 from config import (
     ADMIN_ID, PRICES, GIFT_CARD_TARIFFS, REGION_DISPLAY, REGION_COMMISSION,
     ORDER_STATUSES, FAQ_KEYBOARD, YOOMONEY_WALLET, OZON_PAY_URL,
-    BYBIT_UID, BSC_ADDRESS, TRC20_ADDRESS, CRYPTOPAY_TOKEN,
+    CRYPTOPAY_TOKEN,
     GIFT_CARD_LABELS, REGION_DESCRIPTIONS, GIFT_CARD_HINTS,
 )
 from utils import (
@@ -24,8 +24,7 @@ from utils import (
 from keyboards import (
     region_selection_keyboard, admin_panel_keyboard, rating_keyboard,
     payment_buttons, crypto_payment_text, vip_promo_text, vip_promo_keyboard,
-    cryptopay_enabled, crypto_payment_buttons, cryptopay_invoice_text,
-    USDT_GUIDE_TEXT,
+    crypto_payment_buttons, cryptopay_invoice_text,
 )
 from sheets import add_order_to_sheet, update_payment_method, update_order_status, update_order_amount_in_sheet, find_order_user_in_sheets
 from database import db
@@ -35,6 +34,20 @@ logger = logging.getLogger(__name__)
 
 # CryptoPay singleton (None если токен не задан)
 _cryptopay = CryptoPay(CRYPTOPAY_TOKEN) if CRYPTOPAY_TOKEN else None
+
+
+async def _safe_edit(query, text, reply_markup=None, parse_mode=None):
+    """edit_message_text с fallback на edit_message_caption для фото-сообщений."""
+    try:
+        await query.edit_message_text(text, reply_markup=reply_markup, parse_mode=parse_mode)
+    except BadRequest as e:
+        if "There is no text in the message to edit" in str(e):
+            try:
+                await query.edit_message_caption(caption=text, reply_markup=reply_markup, parse_mode=parse_mode)
+            except Exception:
+                await query.message.reply_text(text, reply_markup=reply_markup, parse_mode=parse_mode)
+        else:
+            raise
 
 
 async def _get_user_orders_msg(telegram_id: int) -> tuple:
@@ -240,8 +253,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "• OZON банк (перевод по ссылке)\n"
                 "• Криптовалюта:\n"
                 "  — Bybit (перевод по UID)\n"
-                "  — Bybit (адрес, USDT BSC/BEP20)\n"
-                "  — Телеграм кошелёк (USDT TRC20)\n\n"
+                "  — CryptoPay (@CryptoBot)\n\n"
                 "⚠️ Для заказов свыше 8 500 ₽ доступна только оплата криптой.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к FAQ", callback_data="back_to_faq")]])
             )
@@ -288,62 +300,38 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         if query.data == "faq_usdt_guide":
+            from config import BYBIT_UID
             await query.edit_message_text(
-                "💳 <b>Как оплатить через Telegram Wallet (за 2 минуты)</b>\n\n"
-                "Оплата заказов от 8 500 ₽ производится в USDT. Это безопасный способ "
-                "оплаты картой любого банка через внутренний сервис Telegram.\n\n"
-                "➕ <b>Шаг 1. Откройте кошелёк</b>\n"
-                "1. В поиске Telegram найдите @wallet\n"
-                "2. Нажмите «Начать» / «Открыть кошелёк»\n\n"
-                "➕ <b>Шаг 2. Покупка USDT (P2P Маркет)</b>\n"
-                "<i>Это покупка крипты у другого человека переводом по карте, под защитой Telegram.</i>\n"
-                "1. В меню кошелька → «P2P Маркет» → «Купить»\n"
-                "2. Выберите <b>USDT</b>, введите сумму заказа в рублях\n"
-                "3. Выберите удобный банк (Сбер, Т-Банк и др.)\n"
-                "4. Фильтр: продавец с рейтингом <b>95%+</b> сделок\n"
-                "5. Нажмите «Купить» и подтвердите сделку\n\n"
-                "➕ <b>Шаг 3. Оплата продавцу</b>\n"
-                "1. Telegram покажет реквизиты карты продавца\n"
-                "2. Перейдите в приложение банка и переведите точную сумму\n"
-                "3. Вернитесь в Telegram и нажмите «Подтвердить оплату»\n"
-                "4. Через 1–3 минуты USDT зачислятся на ваш баланс\n\n"
-                "➕ <b>Шаг 4. Перевод оплаты нам</b>\n"
-                "1. В @wallet → «Отправить» → «Внешний кошелёк»\n"
-                f"2. Сеть: <b>TRON (TRC-20)</b> — комиссия ~1 USDT\n"
-                f"3. Адрес: <code>{TRC20_ADDRESS}</code>\n"
-                "4. Введите сумму USDT из вашего чека и подтвердите отправку\n\n"
-                "✅ <b>Готово!</b> Сделайте скриншот подтверждения и отправьте его в этот чат — оператор выдаст заказ мгновенно.",
+                "💳 <b>Как оплатить криптой (USDT)</b>\n\n"
+                "Оплата заказов от 8 500 ₽ производится в USDT.\n\n"
+                "➕ <b>Способ 1: CryptoPay (автоматически)</b>\n"
+                "1. Нажмите кнопку «⚡ Оплатить через CryptoPay»\n"
+                "2. Оплата подтверждается мгновенно — скриншот не нужен\n\n"
+                "➕ <b>Способ 2: Bybit (перевод по UID)</b>\n"
+                f"1. Откройте Bybit → «Перевод» → «Bybit UID»\n"
+                f"2. Введите UID: <code>{BYBIT_UID}</code>\n"
+                "3. Укажите сумму USDT и подтвердите\n"
+                "4. Отправьте скриншот подтверждения в этот чат\n\n"
+                "✅ <b>Готово!</b> Оператор выдаст заказ мгновенно.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к FAQ", callback_data="back_to_faq")]]),
                 parse_mode="HTML"
             )
             return
 
         if query.data == "vip_usdt_guide":
+            from config import BYBIT_UID
             await query.edit_message_text(
-                "💳 <b>Как оплатить через Telegram Wallet (за 2 минуты)</b>\n\n"
-                "Оплата заказов от 8 500 ₽ производится в USDT. Это безопасный способ "
-                "оплаты картой любого банка через внутренний сервис Telegram.\n\n"
-                "➕ <b>Шаг 1. Откройте кошелёк</b>\n"
-                "1. В поиске Telegram найдите @wallet\n"
-                "2. Нажмите «Начать» / «Открыть кошелёк»\n\n"
-                "➕ <b>Шаг 2. Покупка USDT (P2P Маркет)</b>\n"
-                "<i>Это покупка крипты у другого человека переводом по карте, под защитой Telegram.</i>\n"
-                "1. В меню кошелька → «P2P Маркет» → «Купить»\n"
-                "2. Выберите <b>USDT</b>, введите сумму заказа в рублях\n"
-                "3. Выберите удобный банк (Сбер, Т-Банк и др.)\n"
-                "4. Фильтр: продавец с рейтингом <b>95%+</b> сделок\n"
-                "5. Нажмите «Купить» и подтвердите сделку\n\n"
-                "➕ <b>Шаг 3. Оплата продавцу</b>\n"
-                "1. Telegram покажет реквизиты карты продавца\n"
-                "2. Перейдите в приложение банка и переведите точную сумму\n"
-                "3. Вернитесь в Telegram и нажмите «Подтвердить оплату»\n"
-                "4. Через 1–3 минуты USDT зачислятся на ваш баланс\n\n"
-                "➕ <b>Шаг 4. Перевод оплаты нам</b>\n"
-                "1. В @wallet → «Отправить» → «Внешний кошелёк»\n"
-                f"2. Сеть: <b>TRON (TRC-20)</b> — комиссия ~1 USDT\n"
-                f"3. Адрес: <code>{TRC20_ADDRESS}</code>\n"
-                "4. Введите сумму USDT из вашего чека и подтвердите отправку\n\n"
-                "✅ <b>Готово!</b> Сделайте скриншот подтверждения и отправьте его в этот чат — оператор выдаст заказ мгновенно.",
+                "💳 <b>Как оплатить криптой (USDT)</b>\n\n"
+                "Оплата заказов от 8 500 ₽ производится в USDT.\n\n"
+                "➕ <b>Способ 1: CryptoPay (автоматически)</b>\n"
+                "1. Нажмите кнопку «⚡ Оплатить через CryptoPay»\n"
+                "2. Оплата подтверждается мгновенно — скриншот не нужен\n\n"
+                "➕ <b>Способ 2: Bybit (перевод по UID)</b>\n"
+                f"1. Откройте Bybit → «Перевод» → «Bybit UID»\n"
+                f"2. Введите UID: <code>{BYBIT_UID}</code>\n"
+                "3. Укажите сумму USDT и подтвердите\n"
+                "4. Отправьте скриншот подтверждения в этот чат\n\n"
+                "✅ <b>Готово!</b> Оператор выдаст заказ мгновенно.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="back_to_vip_promo")]]),
                 parse_mode="HTML"
             )
@@ -803,7 +791,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ORDER_INFO_MAP[order_number]['payment_method'] = 'Crypto'
             logger.info(f"Клиент {query.from_user.id} выбрал крипто-оплату для {order_number}")
 
-        # === РУЧНАЯ КРИПТО-ОПЛАТА (Bybit/TRC20) — fallback от CryptoPay ===
+        # === РУЧНАЯ КРИПТО-ОПЛАТА (Bybit UID) — fallback от CryptoPay ===
         elif query.data.startswith("pay_crypto_manual_"):
             order_number = query.data.replace("pay_crypto_manual_", "")
             order = context.user_data.get("order")
@@ -876,8 +864,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "• OZON банк (перевод по ссылке)\n"
                 "• Криптовалюта:\n"
                 "  — Bybit (перевод по UID)\n"
-                "  — Bybit (адрес, USDT BSC/BEP20)\n"
-                "  — Телеграм кошелёк (USDT TRC20)\n\n"
+                "  — CryptoPay (@CryptoBot)\n\n"
                 "⚠️ Для заказов свыше 8 500 ₽ доступна только оплата криптой.\n\n"
                 "⏱ <b>Сроки:</b>\n"
                 "🇰🇿 Казахстан — до 30 минут | 🎁 Gift Card — до 15 минут\n\n"
@@ -1228,7 +1215,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     except Exception as e:
                         logger.error(f"Ошибка уведомления клиента о статусе: {e}")
 
-                await query.edit_message_text(
+                await _safe_edit(
+                    query,
                     f"✅ Статус заказа <b>{order_num}</b> изменён на: <b>{status_name}</b>\n\n"
                     f"{'✉️ Клиент уведомлён.' if user_id else '⚠️ Не удалось уведомить клиента (ID не найден).'}",
                     reply_markup=InlineKeyboardMarkup([
@@ -1239,7 +1227,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 logger.info(f"Админ изменил статус {order_num} на {status_name}")
             else:
-                await query.edit_message_text(
+                await _safe_edit(
+                    query,
                     f"❌ Ошибка изменения статуса заказа <b>{order_num}</b>",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="admin_manage_orders")]]),
                     parse_mode="HTML"
@@ -1372,13 +1361,13 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             logger.error(f"Ошибка в buttons: {e}")
             try:
-                await query.edit_message_text("❌ Произошла ошибка. Попробуйте позже.")
+                await _safe_edit(query, "❌ Произошла ошибка. Попробуйте позже.")
             except Exception:
                 logger.debug("Не удалось отправить сообщение об ошибке (BadRequest fallback)")
     except Exception as e:
         logger.error(f"Ошибка в buttons: {e}")
         try:
-            await query.edit_message_text("❌ Произошла ошибка. Попробуйте позже.")
+            await _safe_edit(query, "❌ Произошла ошибка. Попробуйте позже.")
         except Exception:
             logger.debug("Не удалось отправить сообщение об ошибке (general fallback)")
 
@@ -1481,7 +1470,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 try:
                     await context.bot.send_message(
                         code_client,
-                        f"⭐ Оцените качество нашего сервиса:",
+                        "⭐ Оцените качество нашего сервиса:",
                         reply_markup=InlineKeyboardMarkup(rating_keyboard(code_order))
                     )
                 except Exception as exc:

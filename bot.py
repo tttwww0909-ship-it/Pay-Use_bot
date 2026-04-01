@@ -4,7 +4,6 @@
 
 import asyncio
 import json
-import logging
 
 from aiohttp import web
 from telegram.ext import (

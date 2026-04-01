@@ -10,7 +10,7 @@ from datetime import datetime
 import gspread
 
 from config import ORDER_STATUSES, REGION_DISPLAY, MONTH_NAMES
-from utils import fmt, ORDER_INFO_MAP
+from utils import fmt
 from database import db
 
 logger = logging.getLogger(__name__)

@@ -2,9 +2,9 @@
 Переиспользуемые клавиатуры и текстовые блоки.
 """
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton
 
-from config import BYBIT_UID, BSC_ADDRESS, TRC20_ADDRESS, CRYPTOPAY_TOKEN
+from config import BYBIT_UID, CRYPTOPAY_TOKEN
 from utils import fmt
 
 
@@ -69,15 +69,9 @@ def crypto_payment_text(order_number: str, amount_usdt, amount_rub=None, is_vip=
         f"📦 Заказ: <b>{order_number}</b>\n"
         f"{sum_line}\n\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"📲 <b>Способ 1: Bybit (перевод по UID)</b>\n"
+        f"📲 <b>Bybit (перевод по UID)</b>\n"
         f"UID: <code>{BYBIT_UID}</code>\n"
-        f"Сумма: <b>{amount_usdt} USDT</b>\n\n"
-        f"📲 <b>Способ 2: Bybit (адрес)</b>\n"
-        f"Адрес: <code>{BSC_ADDRESS}</code>\n"
-        f"Сеть: <b>BSC (BEP20)</b> | Монета: <b>USDT</b>\n\n"
-        f"📲 <b>Способ 3: Телеграм кошелёк</b>\n"
-        f"Адрес: <code>{TRC20_ADDRESS}</code>\n"
-        f"Сеть: <b>Tron (TRC20)</b> | Монета: <b>USDT</b>\n"
+        f"Сумма: <b>{amount_usdt} USDT</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n\n"
         f"После перевода нажмите «✅ Я оплатил» и отправьте скриншот подтверждения."
     )
@@ -108,26 +102,17 @@ def vip_promo_keyboard(order_number: str):
 
 
 USDT_GUIDE_TEXT = (
-    "💳 <b>Как оплатить через Telegram Wallet (за 2 минуты)</b>\n\n"
+    "💳 <b>Как оплатить через CryptoPay (за 2 минуты)</b>\n\n"
     "Оплата заказов от 8 500 ₽ производится в USDT. Это безопасный способ "
-    "оплаты картой любого банка через внутренний сервис Telegram.\n\n"
-    "➕ <b>Шаг 1. Откройте кошелёк</b>\n"
-    "1. В поиске Telegram найдите @wallet\n"
-    "2. Нажмите «Начать» / «Открыть кошелёк»\n\n"
-    "➕ <b>Шаг 2. Покупка USDT (P2P Маркет)</b>\n"
-    "<i>Это покупка крипты у другого человека переводом по карте, под защитой Telegram.</i>\n"
-    "1. В меню кошелька → «P2P Маркет» → «Купить»\n"
-    "2. Выберите <b>USDT</b>, введите сумму заказа в рублях\n"
-    "3. Выберите удобный банк (Сбер, Т-Банк и др.)\n"
-    "4. Фильтр: продавец с рейтингом <b>95%+</b> сделок\n"
-    "5. Нажмите «Купить» и подтвердите сделку\n\n"
-    "➕ <b>Шаг 3. Оплата продавцу</b>\n"
-    "1. Бот покажет реквизиты продавца (номер карты / тел.)\n"
-    "2. Переведите указанную сумму <b>в рублях</b> со своей карты\n"
-    "3. Нажмите «Оплачено» в боте — USDT зачислятся на кошелёк\n\n"
-    "➕ <b>Шаг 4. Перевод USDT продавцу</b>\n"
-    "1. В кошельке → «Отправить» → введите адрес и сумму USDT\n"
-    "2. Подтвердите перевод — готово!"
+    "оплаты через @CryptoBot в Telegram.\n\n"
+    "➕ <b>Способ 1: CryptoPay (автоматически)</b>\n"
+    "1. Нажмите кнопку «⚡ Оплатить через CryptoPay»\n"
+    "2. Оплата подтверждается мгновенно — скриншот не нужен\n\n"
+    "➕ <b>Способ 2: Bybit (перевод по UID)</b>\n"
+    f"1. Откройте Bybit → «Перевод» → «Bybit UID»\n"
+    f"2. Введите UID: <code>{BYBIT_UID}</code>\n"
+    "3. Укажите сумму USDT и подтвердите\n"
+    "4. Отправьте скриншот подтверждения в этот чат"
 )
 
 
@@ -140,7 +125,7 @@ def crypto_payment_buttons(order_number: str, pay_url: str | None = None):
     buttons = []
     if pay_url:
         buttons.append([InlineKeyboardButton("⚡ Оплатить через CryptoPay", url=pay_url)])
-        buttons.append([InlineKeyboardButton("💼 Оплатить вручную (Bybit/TRC20)", callback_data=f"pay_crypto_manual_{order_number}")])
+        buttons.append([InlineKeyboardButton("💼 Оплатить вручную (Bybit UID)", callback_data=f"pay_crypto_manual_{order_number}")])
     else:
         buttons.append([InlineKeyboardButton("✅ Я оплатил", callback_data=f"paid_crypto_{order_number}")])
     buttons.append([InlineKeyboardButton("⬅️ Назад к способам оплаты", callback_data="back_to_payment")])
