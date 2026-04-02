@@ -86,7 +86,7 @@ def update_stats_sheet():
             statuses[s] = statuses.get(s, 0) + 1
 
         completed_records = [r for r in records if r.get("Статус") == "Выполнен"]
-        revenue = sum(int(r.get("Сумма RUB", 0) or 0) for r in completed_records)
+        revenue = sum(int(r.get("Цена RUB", 0) or 0) for r in completed_records)
         avg_check = int(revenue / len(completed_records)) if completed_records else 0
         paid_count = statuses.get("Оплачен", 0) + statuses.get("Выполнен", 0)
         conversion = int(paid_count / total * 100) if total > 0 else 0
@@ -94,7 +94,7 @@ def update_stats_sheet():
         today_records = [r for r in records if str(r.get("Дата", "")).startswith(today_str)]
         today_orders = len(today_records)
         today_completed = [r for r in today_records if r.get("Статус") == "Выполнен"]
-        today_revenue = sum(int(r.get("Сумма RUB", 0) or 0) for r in today_completed)
+        today_revenue = sum(int(r.get("Цена RUB", 0) or 0) for r in today_completed)
         today_users = len(set(str(r.get("User_ID", "")) for r in today_records if r.get("User_ID")))
 
         months_data = {}
@@ -114,7 +114,7 @@ def update_stats_sheet():
             if r.get("Статус") in ("Оплачен", "Выполнен"):
                 months_data[month_key]["paid"] += 1
             if r.get("Статус") == "Выполнен":
-                months_data[month_key]["revenue"] += int(r.get("Сумма RUB", 0) or 0)
+                months_data[month_key]["revenue"] += int(r.get("Цена RUB", 0) or 0)
 
         regions_data = {}
         for r in records:
@@ -126,7 +126,7 @@ def update_stats_sheet():
             if r.get("Статус") in ("Оплачен", "Выполнен"):
                 regions_data[reg]["paid"] += 1
             if r.get("Статус") == "Выполнен":
-                regions_data[reg]["revenue"] += int(r.get("Сумма RUB", 0) or 0)
+                regions_data[reg]["revenue"] += int(r.get("Цена RUB", 0) or 0)
 
         payment_methods = {}
         for r in records:
@@ -236,6 +236,7 @@ def add_order_to_sheet(order_data):
                             order_data["username"],
                             order_data.get("region", "KZ"),
                             order_data["tariff"],
+                            order_data.get("kzt", 0),
                             order_data["rub"],
                             "",
                             current_date,
@@ -271,18 +272,18 @@ def add_order_to_sheet(order_data):
 
 
 def update_order_amount_in_sheet(order_number, new_amount_rub):
-    """Обновляет сумму RUB в БД и Google Sheets (колонка F) — для VIP-скидки"""
+    """Обновляет сумму RUB в БД и Google Sheets (колонка G) — для VIP-скидки"""
     try:
         db.update_order_amount(order_number, new_amount_rub)
         current_sheet = get_sheet()
         if current_sheet:
             row = db.get_order_sheets_row(order_number)
             if row:
-                current_sheet.update_cell(row, 6, new_amount_rub)
+                current_sheet.update_cell(row, 7, new_amount_rub)
             else:
                 cell = current_sheet.find(order_number)
                 if cell:
-                    current_sheet.update_cell(cell.row, 6, new_amount_rub)
+                    current_sheet.update_cell(cell.row, 7, new_amount_rub)
                     db.set_order_sheets_row(order_number, cell.row)
             logger.info(f"✅ Сумма {order_number} обновлена в Sheets: {new_amount_rub} ₽")
     except Exception as e:
@@ -290,17 +291,17 @@ def update_order_amount_in_sheet(order_number, new_amount_rub):
 
 
 def update_payment_method(order_number, payment_method):
-    """Записывает способ оплаты в Google Sheets (колонка G)"""
+    """Записывает способ оплаты в Google Sheets (колонка H)"""
     try:
         current_sheet = get_sheet()
         if current_sheet:
             row = db.get_order_sheets_row(order_number)
             if row:
-                current_sheet.update_cell(row, 7, payment_method)
+                current_sheet.update_cell(row, 8, payment_method)
             else:
                 cell = current_sheet.find(order_number)
                 if cell:
-                    current_sheet.update_cell(cell.row, 7, payment_method)
+                    current_sheet.update_cell(cell.row, 8, payment_method)
                     db.set_order_sheets_row(order_number, cell.row)
             logger.info(f"✅ Способ оплаты {payment_method} записан для {order_number}")
     except Exception as e:
@@ -320,11 +321,11 @@ def update_order_status(order_number, new_status):
             try:
                 row = db.get_order_sheets_row(order_number)
                 if row:
-                    current_sheet.update_cell(row, 9, new_status)
+                    current_sheet.update_cell(row, 10, new_status)
                 else:
                     cell = current_sheet.find(order_number)
                     if cell:
-                        current_sheet.update_cell(cell.row, 9, new_status)
+                        current_sheet.update_cell(cell.row, 10, new_status)
                         db.set_order_sheets_row(order_number, cell.row)
                 logger.info(f"✅ Статус {order_number} обновлён в Google Sheets")
             except Exception as e:

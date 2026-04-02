@@ -312,7 +312,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "4. Выберите сеть <b>TRC20 (Tron)</b>\n"
                 "5. Укажите сумму и подтвердите\n"
                 "6. Отправьте скриншот подтверждения в этот чат\n\n"
-                "✅ <b>Готово!</b> Оператор выдаст заказ мгновенно.",
+                "✅ <b>Готово!</b> Оператор выдаст заказ в кратчайшие сроки.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к FAQ", callback_data="back_to_faq")]]),
                 parse_mode="HTML"
             )
@@ -338,7 +338,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "4. Выберите сеть <b>TRC20 (Tron)</b>\n"
                 "5. Укажите сумму и подтвердите\n"
                 "6. Отправьте скриншот подтверждения в этот чат\n\n"
-                "✅ <b>Готово!</b> Оператор выдаст заказ мгновенно.",
+                "✅ <b>Готово!</b> Оператор выдаст заказ в кратчайшие сроки.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="back_to_vip_promo")]]),
                 parse_mode="HTML"
             )
@@ -755,7 +755,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     crypto_payment_text(order_number, amount_usdt, amount_rub=rub_discounted, is_vip=True),
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton("✅ Я оплатил", callback_data=f"paid_crypto_{order_number}")],
-                        [InlineKeyboardButton("⬅️ Назад", callback_data=f"confirm_{order_number}")]
+                        [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_vip_promo")]
                     ]),
                     parse_mode="HTML"
                 )
@@ -1228,9 +1228,26 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     except Exception as e:
                         logger.error(f"Ошибка уведомления клиента о статусе: {e}")
 
+                # Формируем детали заказа для админа
+                order_db_info = await asyncio.to_thread(db.get_order, order_num)
+                order_details_lines = ""
+                if order_db_info:
+                    order_details_lines = (
+                        f"📋 Тариф: <b>{order_db_info.get('tariff', '—')}</b>\n"
+                        f"💰 Сумма: <b>{order_db_info.get('amount_rub', 0)} ₽</b>\n"
+                    )
+                elif order_num in ORDER_INFO_MAP:
+                    oi = ORDER_INFO_MAP[order_num]
+                    order_details_lines = (
+                        f"🌍 Регион: <b>{REGION_DISPLAY.get(oi.get('region', ''), oi.get('region', '—'))}</b>\n"
+                        f"📋 Тариф: <b>{oi.get('tariff', '—')}</b>\n"
+                        f"💰 Сумма: <b>{oi.get('rub', 0)} ₽</b>\n"
+                    )
+
                 await _safe_edit(
                     query,
                     f"✅ Статус заказа <b>{order_num}</b> изменён на: <b>{status_name}</b>\n\n"
+                    f"{order_details_lines}"
                     f"{'✉️ Клиент уведомлён.' if user_id else '⚠️ Не удалось уведомить клиента (ID не найден).'}",
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton("📋 К списку заказов", callback_data="admin_manage_orders")],

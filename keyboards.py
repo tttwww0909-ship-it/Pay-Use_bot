@@ -93,7 +93,8 @@ def vip_promo_text(order_number: str, saving: int, rub_discounted: int, usdt_suf
         f"✅ Итоговая сумма: <b>{fmt(rub_discounted)} ₽</b>{usdt_suffix}\n"
         f"✅ Приоритетная выдача кода\n"
         f"✅ Отсутствие рисков блокировки банком\n\n"
-        f"<i>Нет криптокошелька? Оператор поможет за 2 минуты.</i>"
+        f"<i>Нет криптокошелька? Оператор всегда готов помочь и предоставит актуальную информацию "
+        f"по открытию кошелька. Всё проще, чем вам кажется!</i>"
     )
 
 
@@ -101,8 +102,7 @@ def vip_promo_keyboard(order_number: str):
     """Клавиатура VIP-промо"""
     return [
         [InlineKeyboardButton("💎 Оплатить криптой (−2%)", callback_data=f"vip_crypto_{order_number}")],
-        [InlineKeyboardButton("📱 Как купить USDT за 2 мин?", callback_data="vip_usdt_guide")],
-        [InlineKeyboardButton("💬 Связаться с оператором", url="https://t.me/popolnyaska_halper")],
+        [InlineKeyboardButton(" Связаться с оператором", url="https://t.me/popolnyaska_halper")],
     ]
 
 
