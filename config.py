@@ -25,6 +25,9 @@ CRYPTOPAY_TOKEN = os.getenv("CRYPTOPAY_TOKEN", "")
 CRYPTOPAY_WEBHOOK_PATH = os.getenv("CRYPTOPAY_WEBHOOK_PATH", "/cryptopay/webhook")
 CRYPTOPAY_WEBHOOK_PORT = int(os.getenv("CRYPTOPAY_WEBHOOK_PORT", "8443"))
 
+# Группа для публикации отзывов
+REVIEWS_CHAT_ID = os.getenv("REVIEWS_CHAT_ID", "@popolnyaskachat")
+
 # Проверяем критические переменные
 if not TOKEN:
     raise ValueError("❌ TELEGRAM_TOKEN не установлен в .env файле!")

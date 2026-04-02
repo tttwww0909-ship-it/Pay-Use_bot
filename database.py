@@ -339,11 +339,17 @@ class Database:
             conn.close()
 
     def add_review(self, user_id: int, username: str, order_number: str, rating: int, comment: str = None) -> int:
-        """Добавляет отзыв клиента. Возвращает ID отзыва или 0."""
+        """Добавляет отзыв клиента. Возвращает ID отзыва или 0.
+        Защита от дублей: один заказ = один отзыв."""
         conn = self._connect()
         try:
             with conn:
                 c = conn.cursor()
+                # Проверка: уже есть отзыв на этот заказ?
+                c.execute("SELECT id FROM reviews WHERE order_number = ?", (order_number,))
+                if c.fetchone():
+                    logger.warning(f"⚠️ Отзыв на заказ {order_number} уже существует")
+                    return 0
                 c.execute('''
                     INSERT INTO reviews (user_id, username, order_number, rating, comment, status)
                     VALUES (?, ?, ?, ?, ?, 'pending')
@@ -407,6 +413,19 @@ class Database:
             return [dict(row) for row in c.fetchall()]
         except Exception as e:
             logger.error(f"❌ Ошибка получения всех отзывов: {e}")
+            return []
+        finally:
+            conn.close()
+
+    def get_user_reviews(self, telegram_id: int) -> List[Dict]:
+        """Возвращает отзывы пользователя по telegram_id"""
+        conn = self._connect(row_factory=True)
+        try:
+            c = conn.cursor()
+            c.execute("SELECT * FROM reviews WHERE user_id = ? ORDER BY created_at DESC", (telegram_id,))
+            return [dict(row) for row in c.fetchall()]
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения отзывов пользователя: {e}")
             return []
         finally:
             conn.close()

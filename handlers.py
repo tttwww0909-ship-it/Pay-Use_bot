@@ -13,7 +13,7 @@ from telegram.ext import ContextTypes
 from config import (
     ADMIN_ID, PRICES, GIFT_CARD_TARIFFS, REGION_DISPLAY, REGION_COMMISSION,
     ORDER_STATUSES, FAQ_KEYBOARD, YOOMONEY_WALLET, OZON_PAY_URL,
-    CRYPTOPAY_TOKEN,
+    CRYPTOPAY_TOKEN, REVIEWS_CHAT_ID,
     GIFT_CARD_LABELS, REGION_DESCRIPTIONS, GIFT_CARD_HINTS,
 )
 from utils import (
@@ -73,20 +73,36 @@ async def _get_user_orders_msg(telegram_id: int) -> tuple:
     return True, msg
 
 
+REVIEW_GROUP_MSG = "🔗 https://t.me/popolnyaskachat\nЗдесь вы можете найти свой отзыв после прохождения модерации."
+
+SYSTEM_REVIEW_COMMENTS = {
+    1: "Тот случай, когда одна звезда — это уже щедрый комплимент.",
+    2: "Холодный прием. Как в плохом свидании: искры нет, разговора не вышло, и счет оплачивать не хочется.",
+    3: 'Эффект "ну, такое". Вроде и не провал, но и в учебники истории как триумф вы явно не попадете.',
+    4: "Почти успех! Но пятую звезду я решил(-а) оставить себе на память :)",
+    5: "Молчаливое одобрение — самое ценное. Я не фанат(-ка) лишних слов, когда и так всё супер.",
+}
+
 async def send_review_for_moderation(bot, review_id: int, user_id: int, username: str,
                                       order_num: str, rating: int, comment: str | None):
-    """Отправляет отзыв админу для информации"""
+    """Отправляет отзыв админу с кнопками одобрить/отклонить"""
     stars = "⭐" * rating
     comment_text = f"\n💬 Комментарий: <i>{html_escape(comment)}</i>" if comment else ""
     try:
         await bot.send_message(
             ADMIN_ID,
-            f"⭐ <b>Новый отзыв</b>\n\n"
+            f"⭐ <b>Новый отзыв (#{review_id})</b>\n\n"
             f"📦 Заказ: <b>{order_num}</b>\n"
             f"👤 Клиент: @{html_escape(username)} (ID: <code>{user_id}</code>)\n"
             f"Оценка: {stars}"
             f"{comment_text}",
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("✅ Одобрить", callback_data=f"review_approve_{review_id}"),
+                    InlineKeyboardButton("❌ Отклонить", callback_data=f"review_reject_{review_id}"),
+                ]
+            ])
         )
     except Exception as e:
         logger.error(f"Ошибка отправки отзыва админу: {e}")
@@ -181,7 +197,15 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if query.data == "my_orders":
             user_id = query.from_user.id
             ok, msg = await _get_user_orders_msg(user_id)
-            await query.edit_message_text(msg, parse_mode="HTML")
+            await query.edit_message_text(
+                msg,
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📝 Мои отзывы", callback_data="my_reviews")],
+                    [InlineKeyboardButton("🔗 Все отзывы", url="https://t.me/popolnyaskachat")],
+                    [InlineKeyboardButton("⬅️ В главное меню", callback_data="back_to_start")]
+                ])
+            )
             logger.info(f"Пользователь {user_id} просмотрел заказы")
             return
 
@@ -1326,13 +1350,54 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_id = query.from_user.id
             AWAITING_REVIEW_COMMENT[user_id] = {"order_num": order_num, "rating": rating}
             stars = "⭐" * rating
+            system_comment = SYSTEM_REVIEW_COMMENTS.get(rating, "")
             await query.edit_message_text(
                 f"📦 <b>Заказ {order_num}</b>\n\n"
                 f"Ваша оценка: {stars}\n\n"
-                f"✍️ Напишите комментарий или нажмите «Пропустить»:",
+                f"💬 <i>«{system_comment}»</i>\n\n"
+                f"Отправить с этим комментарием или написать свой?",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⏭️ Пропустить", callback_data=f"review_no_comment_{order_num}_{rating}")]
+                    [InlineKeyboardButton("📤 Отправить", callback_data=f"review_system_{order_num}_{rating}")],
+                    [InlineKeyboardButton("✍️ Написать свой отзыв", callback_data=f"review_custom_{order_num}_{rating}")],
                 ]),
+                parse_mode="HTML"
+            )
+
+        elif query.data.startswith("review_system_"):
+            parts = query.data.replace("review_system_", "").rsplit("_", 1)
+            order_num = parts[0]
+            rating = int(parts[1])
+            user_id = query.from_user.id
+            username = query.from_user.username or query.from_user.full_name or "Аноним"
+            if user_id in AWAITING_REVIEW_COMMENT:
+                del AWAITING_REVIEW_COMMENT[user_id]
+            system_comment = SYSTEM_REVIEW_COMMENTS.get(rating, "")
+            review_id = await asyncio.to_thread(db.add_review, user_id, username, order_num, rating, system_comment)
+            stars = "⭐" * rating
+            if review_id:
+                await send_review_for_moderation(context.bot, review_id, user_id, username, order_num, rating, system_comment)
+                await query.edit_message_text(
+                    f"✅ Спасибо за отзыв! {stars}\n\n"
+                    f"{REVIEW_GROUP_MSG}",
+                    parse_mode="HTML"
+                )
+            else:
+                await query.edit_message_text(
+                    f"ℹ️ Вы уже оставляли отзыв к этому заказу.\n\n{REVIEW_GROUP_MSG}",
+                    parse_mode="HTML"
+                )
+
+        elif query.data.startswith("review_custom_"):
+            parts = query.data.replace("review_custom_", "").rsplit("_", 1)
+            order_num = parts[0]
+            rating = int(parts[1])
+            user_id = query.from_user.id
+            AWAITING_REVIEW_COMMENT[user_id] = {"order_num": order_num, "rating": rating}
+            stars = "⭐" * rating
+            await query.edit_message_text(
+                f"📦 <b>Заказ {order_num}</b>\n\n"
+                f"Ваша оценка: {stars}\n\n"
+                f"✍️ Напишите свой комментарий:",
                 parse_mode="HTML"
             )
 
@@ -1344,13 +1409,21 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             username = query.from_user.username or query.from_user.full_name or "Аноним"
             if user_id in AWAITING_REVIEW_COMMENT:
                 del AWAITING_REVIEW_COMMENT[user_id]
-            review_id = await asyncio.to_thread(db.add_review, user_id, username, order_num, rating, None)
+            system_comment = SYSTEM_REVIEW_COMMENTS.get(rating, "")
+            review_id = await asyncio.to_thread(db.add_review, user_id, username, order_num, rating, system_comment)
             stars = "⭐" * rating
-            await send_review_for_moderation(context.bot, review_id, user_id, username, order_num, rating, None)
-            await query.edit_message_text(
-                f"✅ Спасибо за отзыв! {stars}\n\nВаше мнение помогает нам становиться лучше.",
-                parse_mode="HTML"
-            )
+            if review_id:
+                await send_review_for_moderation(context.bot, review_id, user_id, username, order_num, rating, system_comment)
+                await query.edit_message_text(
+                    f"✅ Спасибо за отзыв! {stars}\n\n"
+                    f"{REVIEW_GROUP_MSG}",
+                    parse_mode="HTML"
+                )
+            else:
+                await query.edit_message_text(
+                    f"ℹ️ Вы уже оставляли отзыв к этому заказу.\n\n{REVIEW_GROUP_MSG}",
+                    parse_mode="HTML"
+                )
 
         elif query.data.startswith("review_skip_"):
             order_num = query.data.replace("review_skip_", "")
@@ -1360,6 +1433,82 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
                 "✅ Заказ выполнен! Спасибо за покупку.\n\nЕсли возникнут вопросы — мы всегда на связи.",
                 parse_mode="HTML"
+            )
+
+        # === МОДЕРАЦИЯ ОТЗЫВОВ (АДМИН) ===
+        elif query.data.startswith("review_approve_"):
+            if query.from_user.id != ADMIN_ID:
+                return
+            review_id = int(query.data.replace("review_approve_", ""))
+            await asyncio.to_thread(db.update_review_status, review_id, "approved")
+            review = await asyncio.to_thread(db.get_review_by_id, review_id)
+            if review:
+                stars = "⭐" * review["rating"]
+                comment = review.get("comment", "")
+                comment_text = f"\n\n<i>«{html_escape(comment)}»</i>" if comment else ""
+                username = review.get("username", "Клиент")
+                date = str(review.get("created_at", ""))[:10]
+                try:
+                    month_names = {
+                        "01": "январь", "02": "февраль", "03": "март", "04": "апрель",
+                        "05": "май", "06": "июнь", "07": "июль", "08": "август",
+                        "09": "сентябрь", "10": "октябрь", "11": "ноябрь", "12": "декабрь"
+                    }
+                    parts = date.split("-")
+                    if len(parts) == 3:
+                        month_name = month_names.get(parts[1], parts[1])
+                        date_display = f"{month_name} {parts[0]}"
+                    else:
+                        date_display = date
+                except Exception:
+                    date_display = date
+                await context.bot.send_message(
+                    REVIEWS_CHAT_ID,
+                    f"{stars}{comment_text}\n\n— {html_escape(username)}, {date_display}",
+                    parse_mode="HTML"
+                )
+            await query.edit_message_text(
+                f"✅ Отзыв #{review_id} одобрен и опубликован в группу.",
+                parse_mode="HTML"
+            )
+
+        elif query.data.startswith("review_reject_"):
+            if query.from_user.id != ADMIN_ID:
+                return
+            review_id = int(query.data.replace("review_reject_", ""))
+            await asyncio.to_thread(db.update_review_status, review_id, "rejected")
+            await query.edit_message_text(
+                f"❌ Отзыв #{review_id} отклонён.",
+                parse_mode="HTML"
+            )
+
+        # === МОИ ОТЗЫВЫ ===
+        elif query.data == "my_reviews":
+            user_id = query.from_user.id
+            reviews = await asyncio.to_thread(db.get_user_reviews, user_id)
+            if not reviews:
+                text = "📝 У вас пока нет отзывов."
+            else:
+                text = "📝 <b>Ваши отзывы:</b>\n\n"
+                status_icons = {"pending": "⏳", "approved": "✅", "rejected": "❌"}
+                for r in reviews[:10]:
+                    stars = "⭐" * r["rating"]
+                    comment = f"\n💬 <i>{html_escape(r['comment'])}</i>" if r.get("comment") else ""
+                    status = status_icons.get(r.get("status", ""), "❓")
+                    date = str(r.get("created_at", ""))[:10]
+                    text += (
+                        f"🔹 <b>{esc(r.get('order_number', '—'))}</b> · {date}\n"
+                        f"{stars} {status}{comment}\n"
+                        f"{'─' * 20}\n"
+                    )
+                text += "\n⏳ — на модерации · ✅ — опубликован · ❌ — отклонён"
+            await query.edit_message_text(
+                text,
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔗 Все отзывы", url="https://t.me/popolnyaskachat")],
+                    [InlineKeyboardButton("⬅️ Назад", callback_data="my_orders")]
+                ])
             )
 
         # === ПЕРЕОТПРАВКА СКРИНШОТА ===
@@ -1592,11 +1741,18 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             del AWAITING_REVIEW_COMMENT[user_id]
             review_id = await asyncio.to_thread(db.add_review, user_id, username, order_num, rating, comment)
             stars = "⭐" * rating
-            await send_review_for_moderation(context.bot, review_id, user_id, username, order_num, rating, comment)
-            await update.message.reply_text(
-                f"✅ Спасибо за отзыв! {stars}\n\nВаше мнение помогает нам становиться лучше.",
-                parse_mode="HTML"
-            )
+            if review_id:
+                await send_review_for_moderation(context.bot, review_id, user_id, username, order_num, rating, comment)
+                await update.message.reply_text(
+                    f"✅ Спасибо за отзыв! {stars}\n\n"
+                    f"{REVIEW_GROUP_MSG}",
+                    parse_mode="HTML"
+                )
+            else:
+                await update.message.reply_text(
+                    f"ℹ️ Вы уже оставляли отзыв к этому заказу.\n\n{REVIEW_GROUP_MSG}",
+                    parse_mode="HTML"
+                )
             return
 
         # === REPLY KEYBOARD КНОПКИ ===
