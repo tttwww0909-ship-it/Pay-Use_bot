@@ -4,7 +4,7 @@
 
 from telegram import InlineKeyboardButton
 
-from config import BYBIT_UID, CRYPTOPAY_TOKEN
+from config import BYBIT_UID, TRC20_ADDRESS, CRYPTOPAY_TOKEN
 from utils import fmt
 
 
@@ -69,8 +69,13 @@ def crypto_payment_text(order_number: str, amount_usdt, amount_rub=None, is_vip=
         f"📦 Заказ: <b>{order_number}</b>\n"
         f"{sum_line}\n\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"📲 <b>Bybit (перевод по UID)</b>\n"
+        f"📲 <b>Способ 1: Bybit (перевод по UID)</b>\n"
         f"UID: <code>{BYBIT_UID}</code>\n"
+        f"Сумма: <b>{amount_usdt} USDT</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"📲 <b>Способ 2: Telegram Wallet (TRC20)</b>\n"
+        f"Адрес: <code>{TRC20_ADDRESS}</code>\n"
         f"Сумма: <b>{amount_usdt} USDT</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n\n"
         f"После перевода нажмите «✅ Я оплатил» и отправьте скриншот подтверждения."
@@ -102,9 +107,8 @@ def vip_promo_keyboard(order_number: str):
 
 
 USDT_GUIDE_TEXT = (
-    "💳 <b>Как оплатить через CryptoPay (за 2 минуты)</b>\n\n"
-    "Оплата заказов от 8 500 ₽ производится в USDT. Это безопасный способ "
-    "оплаты через @CryptoBot в Telegram.\n\n"
+    "💳 <b>Как оплатить криптой (USDT)</b>\n\n"
+    "Оплата заказов от 8 500 ₽ производится в USDT.\n\n"
     "➕ <b>Способ 1: CryptoPay (автоматически)</b>\n"
     "1. Нажмите кнопку «⚡ Оплатить через CryptoPay»\n"
     "2. Оплата подтверждается мгновенно — скриншот не нужен\n\n"
@@ -112,7 +116,14 @@ USDT_GUIDE_TEXT = (
     f"1. Откройте Bybit → «Перевод» → «Bybit UID»\n"
     f"2. Введите UID: <code>{BYBIT_UID}</code>\n"
     "3. Укажите сумму USDT и подтвердите\n"
-    "4. Отправьте скриншот подтверждения в этот чат"
+    "4. Отправьте скриншот подтверждения в этот чат\n\n"
+    "➕ <b>Способ 3: Telegram Wallet (TRC20)</b>\n"
+    "1. Откройте @wallet в Telegram\n"
+    "2. Выберите USDT → «Отправить» → «На адрес»\n"
+    f"3. Вставьте адрес: <code>{TRC20_ADDRESS}</code>\n"
+    "4. Выберите сеть <b>TRC20 (Tron)</b>\n"
+    "5. Укажите сумму и подтвердите\n"
+    "6. Отправьте скриншот подтверждения в этот чат"
 )
 
 

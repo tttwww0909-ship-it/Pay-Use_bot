@@ -107,14 +107,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             resize_keyboard=True
         )
         await update.message.reply_text(
-            "Рад видеть тебя! Я готов помочь с пополнением твоего Apple ID\n\n"
-            "Что для этого нужно?\n\n"
-            "1️⃣ Нажми \"🍏 Пополнить Apple ID\"\n"
-            "2️⃣ Выбери регион своего Apple ID и тариф\n"
-            "   (для Казахстана можно ввести свою сумму)\n"
-            "3️⃣ Выбери способ оплаты и оплати\n"
-            "4️⃣ Отправь данные менеджеру и жди пополнения\n\n"
-            "Всё проще, чем кажется! 😉",
+            "Я готов помогать 🙂",
             reply_markup=reply_keyboard
         )
         logger.info(f"Пользователь {update.message.from_user.id} запустил бот")
@@ -133,7 +126,7 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard = admin_panel_keyboard()
         await update.message.reply_text(
-            "⚙️ Админ панель",
+            "⚙️ Админ-панель",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         logger.info(f"Админ {ADMIN_ID} открыл админ-панель")
@@ -200,7 +193,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("❓ FAQ", callback_data="faq_menu")],
             ]
             await query.edit_message_text(
-                "🍏 Главное меню\n\nВыбери действие или используй кнопки внизу:",
+                "🍏 Главное меню\n\nВыберите действие или используйте кнопки внизу:",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
             return
@@ -216,10 +209,9 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if query.data == "faq_how":
             await query.edit_message_text(
                 "🔹 Как работает сервис?\n\n"
-                "Мы помогаем пополнить Apple ID граждан РФ методом смены региона.\n\n"
-                "🇰🇿 <b>Казахстан</b> — пополнение напрямую на ваш Apple ID. "
-                "Вы отправляете почту, привязанную к Apple ID, а мы отправляем "
-                "подарочный код для пополнения Apple ID.\n\n"
+                "Мы помогаем гражданам РФ пополнить Apple ID методом смены региона.\n\n"
+                "🇰🇿 <b>Казахстан</b> — вы отправляете почту, привязанную к Apple ID, "
+                "а мы отправляем подарочный код на вашу почту для пополнения баланса.\n\n"
                 "<b>🇺🇸 США, 🇦🇪 ОАЭ, 🇹🇷 Турция, 🇸🇦 Саудовская Аравия</b> — мы отправляем "
                 "Gift Card (код) нужного номинала вам для активации через бот.\n\n"
                 "📱 Как сменить регион Apple ID:\n"
@@ -239,7 +231,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
                 "🔹 Сколько времени занимает?\n\n"
                 "🇰🇿 Пополнение Apple ID (Казахстан) — до 30 минут после подтверждения оплаты.\n\n"
-                "🎁 Gift Card (США, ОАЭ, Турция, СА) — до 15 минут. "
+                "🎁 Gift Card (США, ОАЭ, Турция, Сауд. Аравия) — до 15 минут. "
                 "Бот отправит вам код для пополнения Apple ID.\n\n"
                 "В редких случаях может занять больше времени из-за высокой нагрузки.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к FAQ", callback_data="back_to_faq")]])
@@ -253,7 +245,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "• OZON банк (перевод по ссылке)\n"
                 "• Криптовалюта:\n"
                 "  — Bybit (перевод по UID)\n"
-                "  — CryptoPay (@CryptoBot)\n\n"
+                "  — CryptoPay (@CryptoBot)\n"
+                "  — Telegram Wallet (TRC20)\n\n"
                 "⚠️ Для заказов свыше 8 500 ₽ доступна только оплата криптой.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к FAQ", callback_data="back_to_faq")]])
             )
@@ -264,7 +257,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "🔹 Какая комиссия сервиса?\n\n"
                 "Комиссия зависит от региона и суммы:\n\n"
                 "🇺🇸 США — 15% (до $50) / 12% ($100–$300) / 11% ($500)\n"
-                "Турция — 12%\n"
+                "🇹🇷 Турция — 12%\n"
                 "🇰🇿 Казахстан — 20% (до 10к) / 15% (10к–30к) / 12% (свыше 30к)\n"
                 "🇦🇪 ОАЭ Premium — 15%\n"
                 "🇸🇦 Саудовская Аравия Premium — 15%",
@@ -292,15 +285,15 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
                 "🔹 Безопасно ли это?\n\n"
                 "Да! Это абсолютно безопасно. Мы используем минимум личной информации "
-                "(UserID, username и информацию о заказе) для статистики, а вашу Apple почту "
-                "используем непосредственно для пополнения Apple ID напрямую и не сохраняем!\n\n"
+                "(UserID, username и информацию о заказе) для статистики, а вашу почту Apple ID "
+                "используем только для пополнения и не сохраняем!\n\n"
                 "Ваши данные в безопасности!",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к FAQ", callback_data="back_to_faq")]])
             )
             return
 
         if query.data == "faq_usdt_guide":
-            from config import BYBIT_UID
+            from config import BYBIT_UID, TRC20_ADDRESS
             await query.edit_message_text(
                 "💳 <b>Как оплатить криптой (USDT)</b>\n\n"
                 "Оплата заказов от 8 500 ₽ производится в USDT.\n\n"
@@ -312,6 +305,13 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"2. Введите UID: <code>{BYBIT_UID}</code>\n"
                 "3. Укажите сумму USDT и подтвердите\n"
                 "4. Отправьте скриншот подтверждения в этот чат\n\n"
+                "➕ <b>Способ 3: Telegram Wallet (TRC20)</b>\n"
+                "1. Откройте @wallet в Telegram\n"
+                "2. Выберите USDT → «Отправить» → «На адрес»\n"
+                f"3. Вставьте адрес: <code>{TRC20_ADDRESS}</code>\n"
+                "4. Выберите сеть <b>TRC20 (Tron)</b>\n"
+                "5. Укажите сумму и подтвердите\n"
+                "6. Отправьте скриншот подтверждения в этот чат\n\n"
                 "✅ <b>Готово!</b> Оператор выдаст заказ мгновенно.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к FAQ", callback_data="back_to_faq")]]),
                 parse_mode="HTML"
@@ -319,7 +319,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         if query.data == "vip_usdt_guide":
-            from config import BYBIT_UID
+            from config import BYBIT_UID, TRC20_ADDRESS
             await query.edit_message_text(
                 "💳 <b>Как оплатить криптой (USDT)</b>\n\n"
                 "Оплата заказов от 8 500 ₽ производится в USDT.\n\n"
@@ -331,6 +331,13 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"2. Введите UID: <code>{BYBIT_UID}</code>\n"
                 "3. Укажите сумму USDT и подтвердите\n"
                 "4. Отправьте скриншот подтверждения в этот чат\n\n"
+                "➕ <b>Способ 3: Telegram Wallet (TRC20)</b>\n"
+                "1. Откройте @wallet в Telegram\n"
+                "2. Выберите USDT → «Отправить» → «На адрес»\n"
+                f"3. Вставьте адрес: <code>{TRC20_ADDRESS}</code>\n"
+                "4. Выберите сеть <b>TRC20 (Tron)</b>\n"
+                "5. Укажите сумму и подтвердите\n"
+                "6. Отправьте скриншот подтверждения в этот чат\n\n"
                 "✅ <b>Готово!</b> Оператор выдаст заказ мгновенно.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="back_to_vip_promo")]]),
                 parse_mode="HTML"
@@ -385,13 +392,14 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard = region_selection_keyboard()
             context.user_data.pop("awaiting_apple", None)
             await query.edit_message_text(
-                "🍏 Пополнение Apple ID\n\nВыбери регион своего Apple ID:",
+                "🍏 Пополнение Apple ID\n\nВыберите регион своего Apple ID:",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
             return
 
         # === РЕГИОН КАЗАХСТАН ===
         elif query.data == "region_KZ":
+            context.user_data.pop("awaiting_apple", None)
             keyboard = [
                 [InlineKeyboardButton("🍏 5 000 KZT", callback_data="apple_5000")],
                 [InlineKeyboardButton("🍏 10 000 KZT", callback_data="apple_10000")],
@@ -401,8 +409,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
             await query.edit_message_text(
                 "🇰🇿 Казахстан — Пополнение Apple ID\n\n"
-                "🌟 <i>Ваш эксклюзив с ручным пополнением.</i>\n\n"
-                "Выбери сумму пополнения:\n\n"
+                "🌟 <i>Эксклюзивное ручное пополнение.</i>\n\n"
+                "Выберите сумму пополнения:\n\n"
                 "⚠️ <b>Важно:</b> <i>App Store в Казахстане начисляет НДС (12%) сверх цены подписки. "
                 "Имейте это в виду, когда выбираете тариф. "
                 "Мы не несём ответственности, если у вас не получится совершить покупку.</i>",
@@ -428,7 +436,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             region_desc = REGION_DESCRIPTIONS.get(region_code, "")
             extra = f"\n\n{region_desc}" if region_desc else ""
             await query.edit_message_text(
-                f"{region_name} — Gift Card Apple\n\nВыбери номинал гифт-карты:{extra}",
+                f"{region_name} — Gift Card Apple\n\nВыберите номинал гифт-карты:{extra}",
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode="HTML"
             )
@@ -502,7 +510,10 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         elif query.data == "apple_custom":
             context.user_data["awaiting_apple"] = True
-            await query.edit_message_text("Введите сумму пополнения Apple ID (5 000–45 000 KZT)")
+            await query.edit_message_text(
+                "Введите сумму пополнения Apple ID (5 000–45 000 KZT)",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="region_KZ")]])
+            )
 
         # === ВЫБОР ТАРИФА APPLE ID (KZ) ===
         elif query.data.startswith("apple_") and query.data in PRICES:
@@ -538,7 +549,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             }
             keyboard = [
                 [InlineKeyboardButton("✅ Продолжить", callback_data=f"confirm_{order_number}")],
-                [InlineKeyboardButton("❌ Отмена", callback_data="apple_topup")]
+                [InlineKeyboardButton("❌ Отмена", callback_data="region_KZ")]
             ]
             kz_hint = GIFT_CARD_HINTS.get("KZ", {}).get(amount)
             hint_line = f"\n\n💡 <i>Этого номинала хватит на: {kz_hint}.</i>" if kz_hint else ""
@@ -864,7 +875,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "• OZON банк (перевод по ссылке)\n"
                 "• Криптовалюта:\n"
                 "  — Bybit (перевод по UID)\n"
-                "  — CryptoPay (@CryptoBot)\n\n"
+                "  — CryptoPay (@CryptoBot)\n"
+                "  — Telegram Wallet (TRC20)\n\n"
                 "⚠️ Для заказов свыше 8 500 ₽ доступна только оплата криптой.\n\n"
                 "⏱ <b>Сроки:</b>\n"
                 "🇰🇿 Казахстан — до 30 минут | 🎁 Gift Card — до 15 минут\n\n"
@@ -1012,12 +1024,12 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             orders = await asyncio.to_thread(db.get_recent_orders, 10)
             if not orders:
                 await query.edit_message_text(
-                    "📦 Нет заказов пока.",
+                    "📦 Заказов пока нет.",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="back_to_admin")]])
                 )
                 return
 
-            msg = "📦 Последние заказы (последние 10):\n\n"
+            msg = "📦 Последние 10 заказов:\n\n"
             for o in orders:
                 order_info_cached = ORDER_INFO_MAP.get(o['order_number'], {})
                 region_code = order_info_cached.get('region', '')
@@ -1190,7 +1202,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         AWAITING_EMAIL[user_id] = order_num
                     else:
                         status_messages = {
-                            "completed": "✅ Ваш заказ выполнен! Спасибо за покупку.",
+                            "completed": "✅ Ваш заказ выполнен! Спасибо за покупку.\n\n❓ При проблемах — раздел FAQ или напишите в поддержку.",
                             "cancelled": "❌ Ваш заказ отменён. Если есть вопросы — свяжитесь с поддержкой."
                         }
                         client_message = status_messages.get(new_status, f"Статус заказа изменён на: {status_name}")
@@ -1201,6 +1213,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 user_id,
                                 f"📦 <b>Заказ {order_num} выполнен!</b>\n\n"
                                 f"✅ Спасибо за покупку!\n\n"
+                                f"❓ При проблемах — раздел FAQ или напишите в поддержку.\n\n"
                                 f"⭐ Оцените качество нашего сервиса:",
                                 parse_mode="HTML",
                                 reply_markup=InlineKeyboardMarkup(rating_keyboard(order_num))
@@ -1267,10 +1280,14 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 try:
                     await context.bot.send_message(
                         client_id,
-                        f"🎉 <b>Пополнение выполнено!</b>\n\n"
+                        f"🎉 <b>Код отправлен на вашу почту!</b>\n\n"
                         f"📦 Заказ: <b>{order_num}</b>\n\n"
-                        f"✅ Ваш Apple ID успешно пополнен!\n"
+                        f"✅ Проверьте почту — мы отправили код для пополнения Apple ID.\n\n"
+                        f"📱 <b>Как активировать:</b>\n"
+                        f"1. App Store → профиль → «Погасить подарочную карту или код»\n"
+                        f"2. Введите полученный код\n\n"
                         f"Спасибо, что воспользовались нашим сервисом! 🍏\n\n"
+                        f"❓ При проблемах — раздел FAQ или напишите в поддержку.\n\n"
                         f"⭐ Оцените качество нашего сервиса:",
                         parse_mode="HTML",
                         reply_markup=InlineKeyboardMarkup(rating_keyboard(order_num))
@@ -1353,7 +1370,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if query.from_user.id != ADMIN_ID:
                 return
             keyboard = admin_panel_keyboard()
-            await query.edit_message_text("⚙️ Админ панель", reply_markup=InlineKeyboardMarkup(keyboard))
+            await query.edit_message_text("⚙️ Админ-панель", reply_markup=InlineKeyboardMarkup(keyboard))
 
     except BadRequest as e:
         if "Message is not modified" in str(e):
@@ -1462,8 +1479,11 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"🎉 <b>Ваш код получен!</b>\n\n"
                     f"📦 Заказ: <b>{code_order}</b>\n\n"
                     f"🔑 Код Gift Card:\n<code>{html_escape(gift_code)}</code>\n\n"
-                    f"Активируйте код в App Store / iTunes.\n"
-                    f"Спасибо, что воспользовались нашим сервисом! 🍏",
+                    f"📱 <b>Как активировать:</b>\n"
+                    f"1. App Store → профиль → «Погасить подарочную карту или код»\n"
+                    f"2. Введите код выше\n\n"
+                    f"Спасибо, что воспользовались нашим сервисом! 🍏\n\n"
+                    f"❓ При проблемах — раздел FAQ или напишите в поддержку.",
                     parse_mode="HTML"
                 )
                 logger.info(f"Код отправлен клиенту {code_client} для заказа {code_order}")
@@ -1531,7 +1551,12 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(
                     f"✅ Почта <b>{esc(email)}</b> получена!\n\n"
                     f"📦 Заказ: <b>{order_number}</b>\n\n"
-                    f"Мы пополним ваш Apple ID в ближайшее время. Ожидайте уведомления!",
+                    f"Мы отправим код на вашу почту. Ожидайте уведомления!\n\n"
+                    f"📱 <b>Как активировать код:</b>\n"
+                    f"1. Откройте App Store на iPhone/iPad\n"
+                    f"2. Нажмите на иконку профиля → «Погасить подарочную карту или код»\n"
+                    f"3. Введите полученный код\n\n"
+                    f"Готово! Баланс Apple ID будет пополнен.",
                     parse_mode="HTML"
                 )
                 logger.info(f"Клиент {user_id} отправил почту {email} для заказа {order_number}")
@@ -1561,7 +1586,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if text == "🍏 Пополнить Apple ID":
             keyboard = region_selection_keyboard()
             await update.message.reply_text(
-                "🍏 Пополнение Apple ID\n\nВыбери регион своего Apple ID:",
+                "🍏 Пополнение Apple ID\n\nВыберите регион своего Apple ID:",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
             return
@@ -1622,7 +1647,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 }
                 keyboard = [
                     [InlineKeyboardButton("✅ Продолжить", callback_data=f"confirm_{order_number}")],
-                    [InlineKeyboardButton("❌ Отмена", callback_data="apple_topup")]
+                    [InlineKeyboardButton("❌ Отмена", callback_data="region_KZ")]
                 ]
                 await update.message.reply_text(
                     f"📦 Информация о заказе\n\n"

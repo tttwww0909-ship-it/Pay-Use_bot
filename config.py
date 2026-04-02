@@ -18,6 +18,7 @@ YOOMONEY_WALLET = os.getenv("YOOMONEY_WALLET", "")
 # Платёжные реквизиты
 OZON_PAY_URL = os.getenv("OZON_PAY_URL", "")
 BYBIT_UID = os.getenv("BYBIT_UID", "")
+TRC20_ADDRESS = os.getenv("TRC20_ADDRESS", "TWn8rgevKujfC9znz7KS1mNjp3z8SPyRSe")
 
 # CryptoPay (@CryptoBot) — автоматический приём крипто-платежей
 CRYPTOPAY_TOKEN = os.getenv("CRYPTOPAY_TOKEN", "")
