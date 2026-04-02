@@ -1721,6 +1721,7 @@ async def handle_cryptopay_webhook(bot, payload: dict):
     """Обрабатывает вебхук от CryptoPay при успешной оплате.
 
     Автоматически подтверждает оплату: обновляет статус, уведомляет клиента и админа.
+    Идемпотентен: повторный webhook с тем же invoice_id игнорируется.
     """
     if payload.get("update_type") != "invoice_paid":
         return
@@ -1731,9 +1732,23 @@ async def handle_cryptopay_webhook(bot, payload: dict):
         logger.warning("CryptoPay webhook: no order_number in payload")
         return
 
+    invoice_id = str(invoice.get("invoice_id", ""))
     amount = invoice.get("amount", "?")
     asset = invoice.get("asset", "USDT")
+
+    # Идемпотентность: проверяем, не обработан ли уже этот invoice
+    if invoice_id:
+        existing = await asyncio.to_thread(db.get_order_by_payment_id, invoice_id)
+        if existing:
+            logger.info(f"CryptoPay webhook: invoice {invoice_id} уже обработан, пропускаем")
+            return
+
     logger.info(f"CryptoPay: оплата получена — заказ {order_number}, {amount} {asset}")
+
+    # Записываем invoice_id в payments для идемпотентности
+    order = await asyncio.to_thread(db.get_order, order_number)
+    if order and invoice_id:
+        await asyncio.to_thread(db.add_payment, invoice_id, order["id"], float(amount) if amount != "?" else 0)
 
     # Обновляем статус на "Оплачен"
     status_name = ORDER_STATUSES.get("paid", "Оплачен")
