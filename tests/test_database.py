@@ -170,16 +170,20 @@ class TestGenerateOrderNumber:
         assert num == "ORD-1001"
 
     def test_sequential(self, db):
-        uid = db.add_user(111, "u", "U")
-        db.add_order("ORD-1001", uid, "s", "t", 100, 50)
-        num = db.generate_order_number()
-        assert num == "ORD-1002"
+        """Счётчик инкрементируется независимо от содержимого orders"""
+        first = db.generate_order_number()
+        second = db.generate_order_number()
+        assert first == "ORD-1001"
+        assert second == "ORD-1002"
 
-    def test_gap_handling(self, db):
+    def test_counter_independent_of_orders(self, db):
+        """Ручная вставка ORD-1005 не влияет на счётчик"""
         uid = db.add_user(111, "u", "U")
         db.add_order("ORD-1005", uid, "s", "t", 100, 50)
         num = db.generate_order_number()
-        assert num == "ORD-1006"
+        assert num == "ORD-1001"
+        num2 = db.generate_order_number()
+        assert num2 == "ORD-1002"
 
 
 class TestPendingStates:

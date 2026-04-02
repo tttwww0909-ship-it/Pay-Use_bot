@@ -101,6 +101,16 @@ class Database:
                         UNIQUE(state_type, key_id)
                     )
                 ''')
+                c.execute('''
+                    CREATE TABLE IF NOT EXISTS counters (
+                        name TEXT PRIMARY KEY,
+                        value INTEGER NOT NULL DEFAULT 0
+                    )
+                ''')
+                c.execute('''
+                    INSERT OR IGNORE INTO counters (name, value)
+                    VALUES ('order_number', 1000)
+                ''')
                 # Миграции для существующих БД
                 for migration in [
                     "ALTER TABLE reviews ADD COLUMN status TEXT DEFAULT 'pending'",
@@ -610,21 +620,34 @@ class Database:
             conn.close()
 
     def generate_order_number(self) -> str:
-        """Атомарная генерация номера ордера из БД"""
+        """Атомарная генерация номера ордера через таблицу counters.
+
+        Счётчик хранится отдельно от orders — не сбрасывается при
+        очистке заказов и не ломается от fallback-значений.
+        """
+        conn = self._connect()
         try:
-            conn = self._connect()
-            try:
+            with conn:
                 c = conn.cursor()
-                c.execute("SELECT MAX(CAST(SUBSTR(order_number, 5) AS INTEGER)) FROM orders")
-                result = c.fetchone()
-                max_number = result[0] if result and result[0] else 1000
-                return f"ORD-{max(max_number, 1000) + 1}"
-            finally:
-                conn.close()
+                c.execute(
+                    "UPDATE counters SET value = value + 1 WHERE name = 'order_number'"
+                )
+                c.execute(
+                    "SELECT value FROM counters WHERE name = 'order_number'"
+                )
+                row = c.fetchone()
+                if row:
+                    return f"ORD-{row[0]}"
+                # Таблица counters пуста (не должно случиться) — создаём запись
+                c.execute(
+                    "INSERT INTO counters (name, value) VALUES ('order_number', 1001)"
+                )
+                return "ORD-1001"
         except Exception as e:
             logger.error(f"❌ Ошибка генерации номера ордера: {e}")
-            import time as _time
-            return f"ORD-{int(_time.time())}"
+            raise
+        finally:
+            conn.close()
 
 
 # Создаём глобальный объект БД
