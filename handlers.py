@@ -1773,7 +1773,14 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if text == "📋 Заказы":
             ok, msg = await _get_user_orders_msg(user_id)
-            await update.message.reply_text(msg, parse_mode="HTML")
+            await update.message.reply_text(
+                msg,
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📝 Мои отзывы", callback_data="my_reviews")],
+                    [InlineKeyboardButton("🔗 Все отзывы", url="https://t.me/popolnyaskachat")],
+                ])
+            )
             logger.info(f"Пользователь {user_id} просмотрел заказы")
             return
 
