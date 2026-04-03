@@ -319,6 +319,74 @@ class TestBonusBalance:
     def test_bonus_history_empty(self, db):
         assert db.get_bonus_history(999) == []
 
+    def test_add_bonus_sets_expiry(self, db):
+        db.add_user(100, "p", "P")
+        db.add_bonus(100, 50.0, "referral_bonus", "ORD-1001")
+        history = db.get_bonus_history(100, 1)
+        assert history[0]["expires_at"] is not None
+        assert history[0]["remaining"] == 50.0
+
+    def test_spend_bonus_fifo(self, db):
+        """FIFO: старые бонусы списываются первыми"""
+        db.add_user(100, "p", "P")
+        db.add_bonus(100, 30.0, "referral_bonus", "ORD-1001")
+        db.add_bonus(100, 20.0, "referral_bonus", "ORD-1002")
+        db.spend_bonus(100, 25.0, "ORD-1003", "Оплата")
+        # Первое начисление: remaining = 30 - 25 = 5
+        history = db.get_bonus_history(100, limit=20)
+        credits = [h for h in history if h["amount"] > 0]
+        credits.sort(key=lambda x: x["created_at"])
+        assert credits[0]["remaining"] == 5.0
+        assert credits[1]["remaining"] == 20.0
+
+    def test_expire_bonuses(self, db):
+        """Просроченные бонусы сжигаются"""
+        db.add_user(100, "p", "P")
+        db.add_bonus(100, 50.0, "referral_bonus", "ORD-1001")
+        # Вручную просрочим начисление
+        conn = db._connect()
+        conn.execute(
+            "UPDATE bonus_transactions SET expires_at = datetime('now', '-1 day') WHERE user_id = 100 AND amount > 0"
+        )
+        conn.commit()
+        conn.close()
+        expired = db.expire_bonuses()
+        assert len(expired) == 1
+        assert expired[0]["user_id"] == 100
+        assert expired[0]["expired_amount"] == 50.0
+        assert db.get_bonus_balance(100) == 0.0
+
+    def test_get_expiring_soon(self, db):
+        db.add_user(100, "p", "P")
+        db.add_bonus(100, 40.0, "referral_bonus", "ORD-1001")
+        # Устанавливаем expires_at через 3 дня
+        conn = db._connect()
+        conn.execute(
+            "UPDATE bonus_transactions SET expires_at = datetime('now', '+3 days') WHERE user_id = 100 AND amount > 0"
+        )
+        conn.commit()
+        conn.close()
+        expiring = db.get_expiring_soon(7)
+        assert len(expiring) == 1
+        assert expiring[0]["user_id"] == 100
+        assert expiring[0]["expiring_amount"] == 40.0
+
+    def test_expired_bonus_not_spendable(self, db):
+        """Просроченные бонусы нельзя потратить"""
+        db.add_user(100, "p", "P")
+        db.add_bonus(100, 50.0, "referral_bonus", "ORD-1001")
+        conn = db._connect()
+        conn.execute(
+            "UPDATE bonus_transactions SET expires_at = datetime('now', '-1 day') WHERE user_id = 100 AND amount > 0"
+        )
+        conn.commit()
+        conn.close()
+        # Баланс должен быть 0 (просрочено)
+        assert db.get_bonus_balance(100) == 0.0
+        # Списание должно провалиться
+        ok = db.spend_bonus(100, 10.0, "ORD-1002")
+        assert ok is False
+
     def test_count_user_completed_orders(self, db):
         uid = db.add_user(100, "u", "U")
         db.add_order("ORD-1001", uid, "Apple ID", "5000 KZT", 5000, 1000)

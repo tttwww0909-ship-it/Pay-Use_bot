@@ -17,6 +17,7 @@ from config import (
     GIFT_CARD_LABELS, REGION_DESCRIPTIONS, GIFT_CARD_HINTS,
     REF_THRESHOLD, FIXED_PARTNER_BONUS, MAX_BONUS_PAYMENT, REFERRAL_RATES,
     VIP_DISCOUNT, VIP_THRESHOLD, MAX_EMAIL_LENGTH, MAX_REVIEW_LENGTH,
+    BONUS_EXPIRY_MONTHS, BONUS_EXPIRY_WARN_DAYS,
 )
 from utils import (
     fmt, esc, get_rate, get_usdt_rate, get_kz_commission, get_us_commission, smart_round, check_spam, mark_order_created, generate_order,
@@ -420,7 +421,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"2️⃣ Друг получает скидку на первый заказ\n"
                 f"3️⃣ Вы получаете бонусные баллы с его покупки\n"
                 f"4️⃣ Баллами можно оплатить до 50% заказа\n\n"
-                f"<i>1 балл = 1 ₽</i>"
+                f"<i>1 балл = 1 ₽ · Срок действия — {BONUS_EXPIRY_MONTHS} мес.</i>"
             )
             keyboard = [
                 [InlineKeyboardButton("📊 История бонусов", callback_data="bonus_history")],
@@ -443,7 +444,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"списать баллы (до 50% от стоимости).\n\n"
                 f"<b>Как заработать:</b>\n"
                 f"🤝 Пригласите друга — вы получите баллы с его покупок\n"
-                f"💎 Крупные заказы = больше бонусов партнёру"
+                f"💎 Крупные заказы = больше бонусов партнёру\n\n"
+                f"<i>⏳ Срок действия баллов — {BONUS_EXPIRY_MONTHS} мес. с момента начисления</i>"
             )
             keyboard = [
                 [InlineKeyboardButton("📊 История бонусов", callback_data="bonus_history")],
@@ -464,7 +466,9 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     sign = "+" if tx["amount"] > 0 else ""
                     date = str(tx.get("created_at", ""))[:16]
                     desc = tx.get("description") or tx.get("tx_type", "")
-                    text += f"{'🟢' if tx['amount'] > 0 else '🔴'} {sign}{fmt(int(tx['amount']))} ₽ — {esc(desc)}\n   {esc(date)}\n\n"
+                    expires = tx.get("expires_at")
+                    exp_str = f" · до {str(expires)[:10]}" if expires and tx["amount"] > 0 else ""
+                    text += f"{'🟢' if tx['amount'] > 0 else '🔴'} {sign}{fmt(int(tx['amount']))} ₽ — {esc(desc)}{exp_str}\n   {esc(date)}\n\n"
             keyboard = [
                 [InlineKeyboardButton("⬅️ Назад", callback_data="ref_program")],
             ]
@@ -2317,6 +2321,43 @@ async def periodic_cleanup(context: ContextTypes.DEFAULT_TYPE):
     """Периодическая очистка устаревших данных из памяти"""
     cleanup_memory()
     logger.info("⏰ Периодическая очистка памяти выполнена")
+
+
+async def periodic_bonus_expiry(context: ContextTypes.DEFAULT_TYPE):
+    """Сжигание просроченных бонусов + уведомление о скором сгорании (раз в сутки)."""
+    # 1. Сжигаем просроченные
+    expired = await asyncio.to_thread(db.expire_bonuses)
+    for entry in expired:
+        try:
+            await context.bot.send_message(
+                entry["user_id"],
+                f"⏳ <b>Бонусы сгорели</b>\n\n"
+                f"Списано: <b>{fmt(int(entry['expired_amount']))} баллов</b>\n"
+                f"Срок действия ({BONUS_EXPIRY_MONTHS} мес.) истёк.\n\n"
+                f"Приглашайте друзей, чтобы заработать новые баллы! 🤝",
+                parse_mode="HTML",
+            )
+        except Exception:
+            pass
+
+    # 2. Предупреждаем о скором сгорании
+    expiring = await asyncio.to_thread(db.get_expiring_soon, BONUS_EXPIRY_WARN_DAYS)
+    for entry in expiring:
+        try:
+            exp_date = str(entry["earliest_expires"])[:10]
+            await context.bot.send_message(
+                entry["user_id"],
+                f"⚠️ <b>Баллы скоро сгорят!</b>\n\n"
+                f"У вас <b>{fmt(int(entry['expiring_amount']))} баллов</b>, "
+                f"которые сгорят <b>{exp_date}</b>.\n\n"
+                f"Используйте их при следующем заказе! 🍏",
+                parse_mode="HTML",
+            )
+        except Exception:
+            pass
+
+    if expired or expiring:
+        logger.info(f"⏰ Бонусы: сожжено у {len(expired)} польз., предупреждено {len(expiring)} польз.")
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):

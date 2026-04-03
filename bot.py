@@ -4,6 +4,7 @@
 
 import asyncio
 import json
+from datetime import time as datetime_time
 
 from aiohttp import web
 from telegram.ext import (
@@ -15,7 +16,7 @@ from config import TOKEN, CRYPTOPAY_TOKEN, CRYPTOPAY_WEBHOOK_PATH, CRYPTOPAY_WEB
 from cryptopay import CryptoPay
 from handlers import (
     start, admin, reviews_command, buttons,
-    photo_handler, text_handler, periodic_cleanup, error_handler,
+    photo_handler, text_handler, periodic_cleanup, periodic_bonus_expiry, error_handler,
     handle_cryptopay_webhook,
 )
 from utils import (
@@ -41,6 +42,7 @@ def _build_app():
     app.add_error_handler(error_handler)
 
     app.job_queue.run_repeating(periodic_cleanup, interval=3600, first=60)
+    app.job_queue.run_daily(periodic_bonus_expiry, time=datetime_time(hour=10, minute=0))
     return app
 
 

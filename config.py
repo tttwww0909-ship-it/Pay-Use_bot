@@ -136,6 +136,8 @@ VIP_THRESHOLD = 8500          # Порог для VIP-заказов (₽)
 REF_THRESHOLD = 300          # Минимальный чек (₽) для начисления % бонуса
 FIXED_PARTNER_BONUS = 10     # Фикс. бонус партнёру при чеке < REF_THRESHOLD
 MAX_BONUS_PAYMENT = 0.50     # Максимальная доля оплаты баллами (50%)
+BONUS_EXPIRY_MONTHS = 6      # Срок годности бонусов (месяцев)
+BONUS_EXPIRY_WARN_DAYS = 7   # За сколько дней предупреждать о сгорании
 
 # === ОГРАНИЧЕНИЯ ВВОДА ===
 MAX_EMAIL_LENGTH = 100       # Максимальная длина email

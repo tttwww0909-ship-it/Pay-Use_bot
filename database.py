@@ -8,7 +8,7 @@ import sqlite3
 import logging
 from typing import Optional, List, Dict
 
-from config import ORDER_STATUSES
+from config import ORDER_STATUSES, BONUS_EXPIRY_MONTHS
 
 logger = logging.getLogger(__name__)
 
@@ -137,13 +137,17 @@ class Database:
                         tx_type TEXT NOT NULL,
                         order_number TEXT,
                         description TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        expires_at TIMESTAMP,
+                        remaining REAL NOT NULL DEFAULT 0
                     )
                 ''')
                 # Миграции для существующих БД
                 for migration in [
                     "ALTER TABLE reviews ADD COLUMN status TEXT DEFAULT 'pending'",
                     "ALTER TABLE orders ADD COLUMN sheets_row INTEGER",
+                    "ALTER TABLE bonus_transactions ADD COLUMN expires_at TIMESTAMP",
+                    "ALTER TABLE bonus_transactions ADD COLUMN remaining REAL NOT NULL DEFAULT 0",
                 ]:
                     try:
                         c.execute(migration)
@@ -741,11 +745,17 @@ class Database:
             conn.close()
 
     def get_bonus_balance(self, user_id: int) -> float:
-        """Текущий баланс бонусных баллов."""
+        """Текущий активный баланс (исключая просроченные начисления)."""
         conn = self._connect()
         try:
             c = conn.cursor()
-            c.execute("SELECT balance FROM bonus_balance WHERE user_id = ?", (user_id,))
+            # Сумма всех активных remaining (не просроченных)
+            c.execute(
+                """SELECT COALESCE(SUM(remaining), 0) FROM bonus_transactions
+                   WHERE user_id = ? AND remaining > 0
+                     AND (expires_at IS NULL OR expires_at > datetime('now'))""",
+                (user_id,),
+            )
             row = c.fetchone()
             return row[0] if row else 0.0
         except Exception as e:
@@ -772,7 +782,8 @@ class Database:
 
     def add_bonus(self, user_id: int, amount: float, tx_type: str,
                   order_number: str = None, description: str = None) -> bool:
-        """Начисляет бонус (amount > 0). Создаёт запись balance при необходимости."""
+        """Начисляет бонус (amount > 0). Создаёт запись balance при необходимости.
+        Устанавливает expires_at = created_at + BONUS_EXPIRY_MONTHS и remaining = amount."""
         conn = self._connect()
         try:
             with conn:
@@ -786,9 +797,12 @@ class Database:
                     (user_id, amount, amount),
                 )
                 c.execute(
-                    "INSERT INTO bonus_transactions (user_id, amount, tx_type, order_number, description) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (user_id, amount, tx_type, order_number, description),
+                    """INSERT INTO bonus_transactions
+                       (user_id, amount, tx_type, order_number, description, expires_at, remaining)
+                       VALUES (?, ?, ?, ?, ?,
+                               datetime('now', '+' || ? || ' months'), ?)""",
+                    (user_id, amount, tx_type, order_number, description,
+                     BONUS_EXPIRY_MONTHS, amount),
                 )
                 return True
         except Exception as e:
@@ -799,22 +813,47 @@ class Database:
 
     def spend_bonus(self, user_id: int, amount: float, order_number: str = None,
                     description: str = None) -> bool:
-        """Списывает бонус. Проверяет достаточность баланса."""
+        """Списывает бонус. FIFO: сначала самые старые начисления."""
         conn = self._connect()
         try:
             with conn:
                 c = conn.cursor()
-                c.execute("SELECT balance FROM bonus_balance WHERE user_id = ?", (user_id,))
-                row = c.fetchone()
-                if not row or row[0] < amount:
+                # Проверяем активный баланс (не просроченные remaining)
+                c.execute(
+                    """SELECT COALESCE(SUM(remaining), 0) FROM bonus_transactions
+                       WHERE user_id = ? AND remaining > 0
+                         AND (expires_at IS NULL OR expires_at > datetime('now'))""",
+                    (user_id,),
+                )
+                active = c.fetchone()[0]
+                if active < amount:
                     return False
+                # FIFO: выбираем самые старые активные начисления
+                c.execute(
+                    """SELECT id, remaining FROM bonus_transactions
+                       WHERE user_id = ? AND remaining > 0
+                         AND (expires_at IS NULL OR expires_at > datetime('now'))
+                       ORDER BY created_at ASC""",
+                    (user_id,),
+                )
+                left = amount
+                for tx_id, rem in c.fetchall():
+                    if left <= 0:
+                        break
+                    deduct = min(rem, left)
+                    c.execute(
+                        "UPDATE bonus_transactions SET remaining = remaining - ? WHERE id = ?",
+                        (deduct, tx_id),
+                    )
+                    left -= deduct
                 c.execute(
                     "UPDATE bonus_balance SET balance = balance - ?, total_spent = total_spent + ? WHERE user_id = ?",
                     (amount, amount, user_id),
                 )
                 c.execute(
-                    "INSERT INTO bonus_transactions (user_id, amount, tx_type, order_number, description) "
-                    "VALUES (?, ?, 'payment', ?, ?)",
+                    """INSERT INTO bonus_transactions
+                       (user_id, amount, tx_type, order_number, description, remaining)
+                       VALUES (?, ?, 'payment', ?, ?, 0)""",
                     (user_id, -amount, order_number, description),
                 )
                 return True
@@ -836,6 +875,76 @@ class Database:
             return [dict(row) for row in c.fetchall()]
         except Exception as e:
             logger.error(f"❌ Ошибка получения истории бонусов: {e}")
+            return []
+        finally:
+            conn.close()
+
+    def expire_bonuses(self) -> List[Dict]:
+        """Сжигает просроченные бонусы. Возвращает список {'user_id', 'expired_amount'}."""
+        conn = self._connect()
+        try:
+            with conn:
+                c = conn.cursor()
+                # Находим пользователей с просроченными remaining > 0
+                c.execute(
+                    """SELECT user_id, SUM(remaining) as total
+                       FROM bonus_transactions
+                       WHERE remaining > 0 AND expires_at IS NOT NULL AND expires_at <= datetime('now')
+                       GROUP BY user_id"""
+                )
+                expired_users = c.fetchall()
+                results = []
+                for user_id, total in expired_users:
+                    # Обнуляем remaining на просроченных записях
+                    c.execute(
+                        """UPDATE bonus_transactions SET remaining = 0
+                           WHERE user_id = ? AND remaining > 0
+                             AND expires_at IS NOT NULL AND expires_at <= datetime('now')""",
+                        (user_id,),
+                    )
+                    # Вычитаем из агрегатного баланса
+                    c.execute(
+                        "UPDATE bonus_balance SET balance = MAX(balance - ?, 0) WHERE user_id = ?",
+                        (total, user_id),
+                    )
+                    # Лог-транзакция
+                    c.execute(
+                        """INSERT INTO bonus_transactions
+                           (user_id, amount, tx_type, description, remaining)
+                           VALUES (?, ?, 'expired', ?, 0)""",
+                        (user_id, -total, f"Сгорание бонусов (срок {BONUS_EXPIRY_MONTHS} мес.)"),
+                    )
+                    results.append({"user_id": user_id, "expired_amount": total})
+                return results
+        except Exception as e:
+            logger.error(f"❌ Ошибка сгорания бонусов: {e}")
+            return []
+        finally:
+            conn.close()
+
+    def get_expiring_soon(self, days: int = 7) -> List[Dict]:
+        """Пользователи с бонусами, сгорающими в ближайшие N дней.
+        Возвращает [{'user_id', 'expiring_amount', 'earliest_expires'}]."""
+        conn = self._connect()
+        try:
+            c = conn.cursor()
+            c.execute(
+                """SELECT user_id, SUM(remaining) as total,
+                          MIN(expires_at) as earliest
+                   FROM bonus_transactions
+                   WHERE remaining > 0
+                     AND expires_at IS NOT NULL
+                     AND expires_at > datetime('now')
+                     AND expires_at <= datetime('now', '+' || ? || ' days')
+                   GROUP BY user_id""",
+                (days,),
+            )
+            return [
+                {"user_id": r[0], "expiring_amount": r[1], "earliest_expires": r[2]}
+                for r in c.fetchall()
+            ]
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения скоро сгорающих бонусов: {e}")
             return []
         finally:
             conn.close()
