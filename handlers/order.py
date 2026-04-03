@@ -157,8 +157,8 @@ async def handle_gc_tariff(query, context):
         "partner_pct": ref_info["partner_pct"],
     }
     keyboard = [
-        [InlineKeyboardButton("✅ Продолжить", callback_data=f"confirm_{order_number}")],
         [InlineKeyboardButton("📄 Оферта", url="https://telegra.ph/PUBLICHNAYA-OFERTA-DOGOVOR-KUPLI-PRODAZHI-CIFROVYH-TOVAROV-04-03")],
+        [InlineKeyboardButton("✅ Продолжить", callback_data=f"confirm_{order_number}")],
         [InlineKeyboardButton("❌ Отмена", callback_data=f"region_{region_code}")]
     ]
     _hints_r = GIFT_CARD_HINTS.get(region_code, {})
@@ -179,9 +179,7 @@ async def handle_gc_tariff(query, context):
         f"Регион: <b>{region_name}</b>\n"
         f"Тариф: <b>{tariff_name} Gift Card</b>\n"
         f"{price_line}"
-        f"{hint_line}"
-        f"\n\n<i>Нажимая «Продолжить», вы соглашаетесь с </i>"
-        f"<a href='https://telegra.ph/PUBLICHNAYA-OFERTA-DOGOVOR-KUPLI-PRODAZHI-CIFROVYH-TOVAROV-04-03'>офертой</a>.",
+        f"{hint_line}",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="HTML"
     )
@@ -235,8 +233,8 @@ async def handle_apple_tariff(query, context):
         "partner_pct": ref_info["partner_pct"],
     }
     keyboard = [
-        [InlineKeyboardButton("✅ Продолжить", callback_data=f"confirm_{order_number}")],
         [InlineKeyboardButton("📄 Оферта", url="https://telegra.ph/PUBLICHNAYA-OFERTA-DOGOVOR-KUPLI-PRODAZHI-CIFROVYH-TOVAROV-04-03")],
+        [InlineKeyboardButton("✅ Продолжить", callback_data=f"confirm_{order_number}")],
         [InlineKeyboardButton("❌ Отмена", callback_data="region_KZ")]
     ]
     kz_hint = GIFT_CARD_HINTS.get("KZ", {}).get(amount)
@@ -255,9 +253,7 @@ async def handle_apple_tariff(query, context):
         f"Номер заказа: <b>{order_number}</b>\n"
         f"Тариф: <b>{tariff_name}</b>\n"
         f"{price_line}"
-        f"{hint_line}"
-        f"\n\n<i>Нажимая «Продолжить», вы соглашаетесь с </i>"
-        f"<a href='https://telegra.ph/PUBLICHNAYA-OFERTA-DOGOVOR-KUPLI-PRODAZHI-CIFROVYH-TOVAROV-04-03'>офертой</a>.",
+        f"{hint_line}",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="HTML"
     )
@@ -538,8 +534,8 @@ async def handle_custom_amount_text(update, context):
             "partner_pct": ref_info["partner_pct"],
         }
         keyboard = [
-            [InlineKeyboardButton("✅ Продолжить", callback_data=f"confirm_{order_number}")],
             [InlineKeyboardButton("📄 Оферта", url="https://telegra.ph/PUBLICHNAYA-OFERTA-DOGOVOR-KUPLI-PRODAZHI-CIFROVYH-TOVAROV-04-03")],
+            [InlineKeyboardButton("✅ Продолжить", callback_data=f"confirm_{order_number}")],
             [InlineKeyboardButton("❌ Отмена", callback_data="region_KZ")]
         ]
 
@@ -555,9 +551,7 @@ async def handle_custom_amount_text(update, context):
             f"📦 Информация о заказе\n\n"
             f"Номер заказа: <b>{order_number}</b>\n"
             f"Тариф: <b>{tariff_name}</b>\n"
-            f"{price_line}"
-            f"\n\n<i>Нажимая «Продолжить», вы соглашаетесь с </i>"
-            f"<a href='https://telegra.ph/PUBLICHNAYA-OFERTA-DOGOVOR-KUPLI-PRODAZHI-CIFROVYH-TOVAROV-04-03'>офертой</a>.",
+            f"{price_line}",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="HTML"
         )
