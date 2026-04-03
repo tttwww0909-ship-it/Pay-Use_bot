@@ -1077,7 +1077,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if pay_url:
                 await query.edit_message_text(
                     cryptopay_invoice_text(order_number, amount_usdt, amount_rub=rub_discounted, is_vip=True),
-                    reply_markup=InlineKeyboardMarkup(crypto_payment_buttons(order_number, pay_url)),
+                    reply_markup=InlineKeyboardMarkup(crypto_payment_buttons(order_number, pay_url, is_vip=True)),
                     parse_mode="HTML"
                 )
             else:
@@ -1140,11 +1140,13 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.edit_message_text("⚠️ Данные заказа потеряны. Создайте новый заказ.")
                 return
             amount_usdt = context.user_data.get("amount_usdt", 0)
+            is_vip = context.user_data.get("vip_order_number") == order_number
+            back_callback = "back_to_vip_promo" if is_vip else "back_to_payment"
             await query.edit_message_text(
-                crypto_payment_text(order_number, amount_usdt),
+                crypto_payment_text(order_number, amount_usdt, amount_rub=order.get("rub") if is_vip else None, is_vip=is_vip),
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("✅ Я оплатил", callback_data=f"paid_crypto_{order_number}")],
-                    [InlineKeyboardButton("⬅️ Назад к способам оплаты", callback_data="back_to_payment")]
+                    [InlineKeyboardButton("⬅️ Назад", callback_data=back_callback)]
                 ]),
                 parse_mode="HTML"
             )

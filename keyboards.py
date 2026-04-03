@@ -131,7 +131,7 @@ def cryptopay_enabled() -> bool:
     return bool(CRYPTOPAY_TOKEN)
 
 
-def crypto_payment_buttons(order_number: str, pay_url: str | None = None):
+def crypto_payment_buttons(order_number: str, pay_url: str | None = None, is_vip: bool = False):
     """Кнопки крипто-оплаты: CryptoPay (если есть) + ручной перевод."""
     buttons = []
     if pay_url:
@@ -139,7 +139,8 @@ def crypto_payment_buttons(order_number: str, pay_url: str | None = None):
         buttons.append([InlineKeyboardButton("💼 Оплатить вручную (Bybit UID)", callback_data=f"pay_crypto_manual_{order_number}")])
     else:
         buttons.append([InlineKeyboardButton("✅ Я оплатил", callback_data=f"paid_crypto_{order_number}")])
-    buttons.append([InlineKeyboardButton("⬅️ Назад к способам оплаты", callback_data="back_to_payment")])
+    back_callback = "back_to_vip_promo" if is_vip else "back_to_payment"
+    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=back_callback)])
     return buttons
 
 
