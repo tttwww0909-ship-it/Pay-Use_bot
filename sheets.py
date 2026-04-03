@@ -213,7 +213,7 @@ def add_order_to_sheet(order_data):
             user_id=user_id,
             service=order_data["service"],
             tariff=order_data["tariff"],
-            amount_kzt=order_data["kzt"],
+            amount_kzt=0,
             amount_rub=order_data["rub"],
             payment_id=None
         )
@@ -236,7 +236,6 @@ def add_order_to_sheet(order_data):
                             order_data["username"],
                             order_data.get("region", "KZ"),
                             order_data["tariff"],
-                            order_data.get("kzt", 0),
                             order_data["rub"],
                             "",
                             current_date,
@@ -272,18 +271,18 @@ def add_order_to_sheet(order_data):
 
 
 def update_order_amount_in_sheet(order_number, new_amount_rub):
-    """Обновляет сумму RUB в БД и Google Sheets (колонка G) — для VIP-скидки"""
+    """Обновляет сумму RUB в БД и Google Sheets (колонка F) — для VIP-скидки"""
     try:
         db.update_order_amount(order_number, new_amount_rub)
         current_sheet = get_sheet()
         if current_sheet:
             row = db.get_order_sheets_row(order_number)
             if row:
-                current_sheet.update_cell(row, 7, new_amount_rub)
+                current_sheet.update_cell(row, 6, new_amount_rub)
             else:
                 cell = current_sheet.find(order_number)
                 if cell:
-                    current_sheet.update_cell(cell.row, 7, new_amount_rub)
+                    current_sheet.update_cell(cell.row, 6, new_amount_rub)
                     db.set_order_sheets_row(order_number, cell.row)
             logger.info(f"✅ Сумма {order_number} обновлена в Sheets: {new_amount_rub} ₽")
     except Exception as e:
@@ -291,17 +290,17 @@ def update_order_amount_in_sheet(order_number, new_amount_rub):
 
 
 def update_payment_method(order_number, payment_method):
-    """Записывает способ оплаты в Google Sheets (колонка H)"""
+    """Записывает способ оплаты в Google Sheets (колонка G)"""
     try:
         current_sheet = get_sheet()
         if current_sheet:
             row = db.get_order_sheets_row(order_number)
             if row:
-                current_sheet.update_cell(row, 8, payment_method)
+                current_sheet.update_cell(row, 7, payment_method)
             else:
                 cell = current_sheet.find(order_number)
                 if cell:
-                    current_sheet.update_cell(cell.row, 8, payment_method)
+                    current_sheet.update_cell(cell.row, 7, payment_method)
                     db.set_order_sheets_row(order_number, cell.row)
             logger.info(f"✅ Способ оплаты {payment_method} записан для {order_number}")
     except Exception as e:
@@ -321,11 +320,11 @@ def update_order_status(order_number, new_status):
             try:
                 row = db.get_order_sheets_row(order_number)
                 if row:
-                    current_sheet.update_cell(row, 10, new_status)
+                    current_sheet.update_cell(row, 9, new_status)
                 else:
                     cell = current_sheet.find(order_number)
                     if cell:
-                        current_sheet.update_cell(cell.row, 10, new_status)
+                        current_sheet.update_cell(cell.row, 9, new_status)
                         db.set_order_sheets_row(order_number, cell.row)
                 logger.info(f"✅ Статус {order_number} обновлён в Google Sheets")
             except Exception as e:
