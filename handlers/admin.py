@@ -444,6 +444,9 @@ async def handle_topup_done(query, context):
 async def handle_back_to_admin(query, context):
     if query.from_user.id != ADMIN_ID:
         return
+    # Очищаем все ожидающие состояния админа
+    for key in ("admin_awaiting_broadcast", "admin_awaiting_bonus_uid", "admin_awaiting_bonus_amount"):
+        context.user_data.pop(key, None)
     keyboard = admin_panel_keyboard()
     await query.edit_message_text("⚙️ Админ-панель", reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -462,7 +465,8 @@ async def handle_admin_broadcast(query, context):
         "📢 <b>Рассылка</b>\n\n"
         "Введите текст сообщения для всех пользователей.\n\n"
         "Поддерживается HTML-разметка (<b>жирный</b>, <i>курсив</i>, <code>код</code>).\n\n"
-        "Для отмены отправьте /admin",
+        "Для отмены нажмите кнопку ⬅️ Назад.",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="back_to_admin")]]),
         parse_mode="HTML"
     )
 
@@ -518,6 +522,7 @@ async def handle_admin_bonus(query, context):
         "💰 <b>Управление бонусами</b>\n\n"
         "Введите Telegram ID пользователя:\n\n"
         "<i>ID можно найти в заказах или статистике.</i>",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="back_to_admin")]]),
         parse_mode="HTML"
     )
 
